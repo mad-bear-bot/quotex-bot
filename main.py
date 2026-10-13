@@ -115,10 +115,18 @@ def analyze(symbol):
         return None
 
 def get_best():
-    all_s=[r for r in [analyze(s) for s in SYMBOLS] if r]
-    if not all_s: return None,[]
-    all_s.sort(key=lambda x:(x["align_num"],x["score"]),reverse=True)
-    return all_s[0],all_s[1:]
+    results=[]
+    for s in SYMBOLS:
+        try:
+            r=analyze(s)
+            if r: results.append(r)
+        except Exception as e:
+            logging.error(f"analyze {s} failed: {e}")
+    if not results:
+        logging.warning("all analyzes failed")
+        return None,[]
+    results.sort(key=lambda x:(x["align_num"],x["score"]),reverse=True)
+    return results[0],results[1:]
 
 def format_message(r):
     direction_emoji="🟢" if r["signal"]=="CALL" else "🔴"
@@ -152,7 +160,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except: pass
     cid=str(update.effective_chat.id)
     if is_authed(cid):
-        await context.bot.send_message(chat_id=cid, text="🐻 MAD BEAR V17\n\n✅ القائمة الرئيسية", reply_markup=main_keyboard())
+        await context.bot.send_message(chat_id=cid, text="🐻 MAD BEAR V18\n\n✅ القائمة الرئيسية", reply_markup=main_keyboard())
     else: await context.bot.send_message(chat_id=cid, text="🐻 MAD BEAR\n\n🔐 أرسل الرقم السري:")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -198,18 +206,31 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def check_signals(context: ContextTypes.DEFAULT_TYPE):
     for cid,ok in list(state.get("auth",{}).items()):
-        if not ok or state.get("paused",{}).get(cid): continue
-        best,_=get_best()
-        if not best: continue
+        if not ok or state.get("paused",{}).get(cid): 
+            logging.info(f"skip {cid} paused or not authed")
+            continue
         try:
+            best,_=get_best()
+            if not best:
+                logging.warning("get_best returned None, sending fallback")
+                # fallback signal
+                await context.bot.send_message(chat_id=int(cid), text="⚠️ فحص الأسواق - البيانات بطيئة\nجاري المحاولة مرة أخرى بعد دقيقة\n\n🔄 AUTO كل 5 دق شغال ✅")
+                continue
             msg=format_message(best); setup_bear_images(); img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
-            if os.path.exists(img): await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f"🔄 اشارة كل 5 دق - V16\n\n{msg}")
-            else: await context.bot.send_message(chat_id=int(cid),text=f"🔄 اشارة كل 5 دق\n\n{msg}")
-        except Exception as e: logging.error(f"auto {e}")
+            if os.path.exists(img): 
+                await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f"🔄 اشارة كل 5 دق - V18\n\n{msg}")
+            else: 
+                await context.bot.send_message(chat_id=int(cid),text=f"🔄 اشارة كل 5 دق - V18\n\n{msg}")
+            logging.info(f"auto signal sent to {cid}: {best['pair']} {best['signal']}")
+        except Exception as e: 
+            logging.error(f"auto error {e}")
+            try:
+                await context.bot.send_message(chat_id=int(cid), text=f"⚠️ خطأ في الإشارة: {e}\nسيتم المحاولة بعد 5 دق")
+            except: pass
 
 flask_app=Flask(__name__)
 @flask_app.route("/")
-def home(): return "MAD BEAR V17 FIXED - OK", 200
+def home(): return "MAD BEAR V18 FIXED - OK", 200
 def run_flask():
     import time; time.sleep(1)
     flask_app.run(host="0.0.0.0",port=int(os.getenv("PORT",10000)),use_reloader=False)
@@ -222,8 +243,8 @@ def main():
     app.add_handler(CommandHandler("start",start))
     app.add_handler(CallbackQueryHandler(buttons))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,handle_message))
-    app.job_queue.run_repeating(check_signals,interval=300,first=30)
-    logging.info("V17 FIXED - ANTI-SLEEP + ALWAYS REPLY READY")
+    app.job_queue.run_repeating(check_signals,interval=300,first=10)
+    logging.info("V18 FORCE SIGNAL - ALWAYS SEND")
     app.run_polling(drop_pending_updates=True)
 
 if __name__=="__main__": main()
