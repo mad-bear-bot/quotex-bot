@@ -3,6 +3,9 @@ from datetime import datetime, timezone, timedelta
 import yfinance as yf
 import numpy as np
 from flask import Flask
+flask_app = Flask(__name__)
+@flask_app.route('/')
+def home(): return 'V24 Running'
 from threading import Thread
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
@@ -200,7 +203,7 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
             continue
         try:
             msg=format_message(best); setup_bear_images(); img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
-            if os.path.exists(img): await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f"\n\n{msg}")
+            if os.path.exists(img): await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f"{msg}")
             else: await context.bot.send_message(chat_id=int(cid),text=f" \n\n{msg}")
         except Exception as e: logging.error(f"auto {e}")
 
@@ -211,30 +214,47 @@ def run_flask():
     import time; time.sleep(1)
     flask_app.run(host="0.0.0.0",port=int(os.getenv("PORT",10000)),use_reloader=False)
 
-def main():
-    if not BOT_TOKEN: logging.error("Missing TOKEN"); return
-    Thread(target=run_flask,daemon=True).start()
-    setup_bear_images()
-    # Anti-conflict: delete webhook and close old connections
-    import asyncio
-    async def clean():
-        from telegram import Bot
-        try:
-            b=Bot(token=BOT_TOKEN)
-            await b.delete_webhook(drop_pending_updates=True)
-            logging.info("Webhook deleted - anti-conflict")
-        except Exception as e:
-            logging.warning(f"clean webhook {e}")
-    try:
-        asyncio.run(clean())
-    except: pass
-    time.sleep(2)
-    app=Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start",start))
-    app.add_handler(CallbackQueryHandler(buttons))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,handle_message))
-    app.job_queue.run_repeating(check_signals,interval=30,first=10)
-    logging.info(" - SENDS IMMEDIATELY WHEN 3/3 FOUND")
-    app.run_polling(drop_pending_updates=True)
 
-if __name__=="__main__": main()
+def main():
+    # Anti-conflict: delete webhook first with timeout
+    import requests
+    try:
+        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook", timeout=10)
+        logging.info("Webhook deleted - anti-conflict")
+        time.sleep(2)
+    except Exception as e:
+        logging.error(f"delete webhook failed {e}")
+    
+    # Fix event loop
+    try:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+    except:
+        pass
+    
+    setup_bear_images()
+    
+    # Build app
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Add handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    
+    # Job queue - every 30 sec check, but send only every 5 min
+    application.job_queue.run_repeating(check_signals, interval=30, first=15)
+    
+    # Flask for Render health check in separate thread
+    def run_flask():
+        try:
+            flask_app.run(host="0.0.0.0", port=10000, debug=False, use_reloader=False)
+        except:
+            pass
+    
+    import threading
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    
+    # Start polling - blocking
+    logging.info("Starting polling V24 5MIN CYCLE CLEAN")
+    application.run_polling(drop_pending_updates=True, close_loop=False)
