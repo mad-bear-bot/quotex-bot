@@ -152,7 +152,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except: pass
     cid=str(update.effective_chat.id)
     if is_authed(cid):
-        await context.bot.send_message(chat_id=cid, text="🐻 MAD BEAR V16\n\n✅ القائمة الرئيسية", reply_markup=main_keyboard())
+        await context.bot.send_message(chat_id=cid, text="🐻 MAD BEAR V17\n\n✅ القائمة الرئيسية", reply_markup=main_keyboard())
     else: await context.bot.send_message(chat_id=cid, text="🐻 MAD BEAR\n\n🔐 أرسل الرقم السري:")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -163,6 +163,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text==BOT_PASSWORD:
         state["auth"][cid]=True; save_state(state)
         await context.bot.send_message(chat_id=cid, text="تم فتح البوت 🔑\nالقائمة الرئيسية", reply_markup=main_keyboard())
+    elif is_authed(cid):
+        await context.bot.send_message(chat_id=cid, text="✅ القائمة الرئيسية", reply_markup=main_keyboard())
+    else:
+        await context.bot.send_message(chat_id=cid, text="🔐 الرقم السري غلط - ارسل الرقم الصحيح")
 
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global state
@@ -205,8 +209,10 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
 
 flask_app=Flask(__name__)
 @flask_app.route("/")
-def home(): return "MAD BEAR V16 STABLE"
-def run_flask(): flask_app.run(host="0.0.0.0",port=int(os.getenv("PORT",10000)))
+def home(): return "MAD BEAR V17 FIXED - OK", 200
+def run_flask():
+    import time; time.sleep(1)
+    flask_app.run(host="0.0.0.0",port=int(os.getenv("PORT",10000)),use_reloader=False)
 
 def main():
     if not BOT_TOKEN: logging.error("Missing TOKEN"); return
@@ -217,7 +223,7 @@ def main():
     app.add_handler(CallbackQueryHandler(buttons))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,handle_message))
     app.job_queue.run_repeating(check_signals,interval=300,first=30)
-    logging.info("V16 STABLE READY")
+    logging.info("V17 FIXED - ANTI-SLEEP + ALWAYS REPLY READY")
     app.run_polling(drop_pending_updates=True)
 
 if __name__=="__main__": main()
