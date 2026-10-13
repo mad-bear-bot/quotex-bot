@@ -12,11 +12,18 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-BOT_PASSWORD = "7154"  # الرقم السري فقط هنا في الكود - لا يظهر للمستخدم أبداً
+BOT_PASSWORD = "7154"
 SYMBOLS = ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "EURJPY=X", "AUDUSD=X", "GBPJPY=X"]
-NAMES = {"EURUSD=X":"EUR/USD", "GBPUSD=X":"GBP/USD", "USDJPY=X":"USD/JPY", "EURJPY=X":"EUR/JPY", "AUDUSD=X":"AUD/USD", "GBPJPY=X":"GBP/JPY"}
+NAMES = {
+ "EURUSD=X":"EUR/USD 🇪🇺🇺🇸",
+ "GBPUSD=X":"GBP/USD 🇬🇧🇺🇸",
+ "USDJPY=X":"USD/JPY 🇺🇸🇯🇵",
+ "EURJPY=X":"EUR/JPY 🇪🇺🇯🇵",
+ "AUDUSD=X":"AUD/USD 🇦🇺🇺🇸",
+ "GBPJPY=X":"GBP/JPY 🇬🇧🇯🇵"
+}
+STATE_FILE = "/tmp/bot_v8.json"
 
-STATE_FILE = "/tmp/bot_final_clean.json"
 def load_state():
     try:
         with open(STATE_FILE,'r') as f: return json.load(f)
@@ -25,6 +32,7 @@ def save_state(s):
     try:
         with open(STATE_FILE,'w') as f: json.dump(s,f)
     except: pass
+
 state = load_state()
 sent_pairs = state.get("sent", {})
 cooldown = state.get("cooldown", {})
@@ -55,6 +63,13 @@ def get_h1_trend(symbol):
         else: return "neutral",0,rsi,ema
     except: return "neutral",0,50,0
 
+def get_score_label(score):
+    if score >= 90: return "قوي جداً 🔥🔥"
+    elif score >= 80: return "قوي جداً 🔥"
+    elif score >= 70: return "قوي 💪"
+    elif score >= 60: return "متوسط ⚠️"
+    else: return "ضعيف ⚪"
+
 def is_news_time():
     now=datetime.now(timezone.utc); h=now.hour; m=now.minute
     if h==13 and m>=20: return True,"أخبار USD 13:30"
@@ -80,29 +95,37 @@ def analyze_v7(symbol):
         ob_bull=len(closes)>6 and closes[-1]>closes[-2]>closes[-3]; ob_bear=len(closes)>6 and closes[-1]<closes[-2]<closes[-3]
         fvg_bull=len(lows)>4 and lows[-1]>highs[-3]; fvg_bear=len(highs)>4 and highs[-1]<lows[-3]
         h1_trend,_,rsi_h1,_=get_h1_trend(symbol)
-        score=0; reasons=[]
-        if bullish_body: score+=40; reasons.append("BOS صاعد قوي")
-        elif bullish_wick: score+=25; reasons.append("BOS صاعد")
-        if bearish_body: score+=40; reasons.append("BOS هابط قوي")
-        elif bearish_wick: score+=25; reasons.append("BOS هابط")
+        score=0; bos_text=""; reasons=[]
+        if bullish_body:
+            score+=40; bos_text="BOS 🟢 ⬆️"; reasons.append("BOS صاعد")
+        elif bullish_wick:
+            score+=25; bos_text="BOS 🟢 ⬆️"; reasons.append("BOS صاعد")
+        if bearish_body:
+            score+=40; bos_text="BOS 🔴 ⬇️"; reasons.append("BOS هابط")
+        elif bearish_wick:
+            score+=25; bos_text="BOS 🔴 ⬇️"; reasons.append("BOS هابط")
         if ob_bull or ob_bear: score+=20; reasons.append("Order Block")
         if fvg_bull or fvg_bear: score+=15; reasons.append("FVG")
         signal=None
         if bullish_body or bullish_wick:
             signal="CALL"
-            if h1_trend=="bullish": score+=30; reasons.append("H1 صاعد ✅")
-            elif h1_trend=="bearish": score-=25; reasons.append("H1 هابط ❌")
+            if h1_trend=="bullish": score+=30
+            elif h1_trend=="bearish": score-=25
         elif bearish_body or bearish_wick:
             signal="PUT"
-            if h1_trend=="bearish": score+=30; reasons.append("H1 هابط ✅")
-            elif h1_trend=="bullish": score-=25; reasons.append("H1 صاعد ❌")
+            if h1_trend=="bearish": score+=30
+            elif h1_trend=="bullish": score-=25
         if signal=="CALL" and rsi_m5>75: score-=20
         if signal=="PUT" and rsi_m5<25: score-=20
         if score<60: return None
         conf=92 if score>=90 else 85 if score>=80 else 78
         clean=NAMES.get(symbol,symbol.replace("=X",""))
-        return {"pair":clean,"symbol":symbol,"signal":signal,"conf":conf,"price":last_close,"reason":"+ ".join(reasons[:3]),"score":score,"time":datetime.now().strftime("%H:%M"),"df":df.tail(80),"rsi_m5":rsi_m5,"rsi_h1":rsi_h1,"h1_trend":h1_trend,"is_body":bullish_body or bearish_body,"prev_high":prev_high,"prev_low":prev_low}
-    except: return None
+        score_label = get_score_label(score)
+        reason_display = f"{bos_text} {score_label} + Order Block" if (ob_bull or ob_bear) else f"{bos_text} {score_label}"
+        if fvg_bull or fvg_bear: reason_display += " + FVG"
+        return {"pair":clean,"symbol":symbol,"signal":signal,"conf":conf,"price":last_close,"reason":reason_display,"score":score,"score_label":score_label,"bos_text":bos_text,"time":datetime.now().strftime("%H:%M"),"df":df.tail(80),"rsi_m5":rsi_m5,"rsi_h1":rsi_h1,"h1_trend":h1_trend,"is_body":bullish_body or bearish_body,"prev_high":prev_high,"prev_low":prev_low}
+    except Exception as e:
+        logging.error(f"analyze {e}"); return None
 
 def get_best():
     all_s=[]
@@ -130,15 +153,16 @@ def create_chart(result, is_best=False):
             ax1.add_patch(rect)
         ax1.axhline(y=result['price'],color='#FFD600',linestyle='--',linewidth=1.5,alpha=0.9,label=f"Entry {result['price']:.5f}")
         ax1.scatter([n-1],[closes[-1]],color='#00E676' if result['signal']=='CALL' else '#FF1744',s=300,zorder=10,edcolors='white',linewidth=1.5)
-        ax1.set_title(f"{'⭐ BEST ' if is_best else ''}{result['pair']} {result['signal']} {result['conf']}% Score {result['score']:.0f} LIVE",color='white',fontsize=11,fontweight='bold')
+        emoji = "🟢 ⬆️" if result['signal']=="CALL" else "🔴 ⬇️"
+        ax1.set_title(f"{'⭐ BEST ' if is_best else ''}{result['pair']} {result['signal']} {emoji} {result['conf']}% Score {result['score']:.0f} ({result['score_label']}) LIVE",color='white',fontsize=11,fontweight='bold')
         ax1.grid(True,alpha=0.1); ax1.tick_params(colors='#888888'); ax1.legend(loc='upper left',fontsize=8,facecolor='#1E1E1E',edgecolor='#333',labelcolor='white'); ax1.set_xlim(-1,n)
         rsi_vals=[calculate_rsi(closes[:i+1]) if i>=14 else 50 for i in range(n)]
         ax2.plot(range(n),rsi_vals,color='#FF9100',linewidth=1.6); ax2.axhline(70,color='#FF1744',linestyle='--',alpha=0.5); ax2.axhline(30,color='#00C853',linestyle='--',alpha=0.5)
         ax2.set_ylabel('RSI',color='#888',fontsize=9); ax2.set_ylim(0,100); ax2.tick_params(colors='#888'); ax2.grid(True,alpha=0.08)
-        ax3.axis('off'); info=f"H1: {result['h1_trend'].upper()} | RSI M5:{result['rsi_m5']:.0f} H1:{result['rsi_h1']:.0f} | {result['time']} UTC | Real Market"
+        ax3.axis('off'); info=f"{result['bos_text']} | H1: {result['h1_trend'].upper()} | RSI M5:{result['rsi_m5']:.0f} H1:{result['rsi_h1']:.0f} | {result['score_label']} | {result['time']} UTC"
         ax3.text(0.5,0.5,info,ha='center',va='center',color='#AAAAAA',fontsize=9,bbox=dict(boxstyle='round,pad=0.5',facecolor='#1E1E1E',edgecolor='#333'))
         plt.tight_layout()
-        path=f"/tmp/live_{result['pair'].replace('/','_')}.png"
+        path=f"/tmp/live_{result['symbol'].replace('=X','')}_{int(time.time())}.png"
         plt.savefig(path,dpi=200,facecolor='#121212',bbox_inches='tight'); plt.close()
         return path
     except Exception as e:
@@ -157,20 +181,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except: pass
     cid=str(update.effective_chat.id)
     if is_authed(cid):
-        await context.bot.send_message(chat_id=cid, text="مرحباً MAD BEAR BOT 🐻\n\n✅ البوت شغال\nاختر من القائمة:", reply_markup=main_keyboard())
+        await context.bot.send_message(chat_id=cid, text="مرحباً MAD BEAR BOT 🐻\n\n✅ V8 NEW STYLE شغال\nاختر من القائمة:", reply_markup=main_keyboard())
     else:
-        # رسالة نظيفة بدون كشف الرقم السري نهائياً
         await context.bot.send_message(chat_id=cid, text="مرحباً MAD BEAR BOT 🐻\n\n🔐 أرسل الرقم السري للدخول:")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global state
     text=update.message.text.strip(); cid=str(update.effective_chat.id)
-    # احذف رسالة المستخدم فوراً عشان الرقم السري ما يبقى ظاهر
     try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
     except: pass
     if text==BOT_PASSWORD:
         state["auth"][cid]=True; save_state(state)
-        await context.bot.send_message(chat_id=cid, text="تم فتح البوت 🔑\n\n🚀 مرحباً MAD BEAR BOT 🐻\n✅ تم الدخول بنجاح", reply_markup=main_keyboard())
+        await context.bot.send_message(chat_id=cid, text="تم فتح البوت 🔑\n\n🚀 V8 NEW STYLE\n✅ تم الدخول بنجاح", reply_markup=main_keyboard())
         return
     if not is_authed(cid):
         await context.bot.send_message(chat_id=cid, text="❌ الرقم خطأ\n\n🔐 أرسل الرقم السري للدخول:")
@@ -178,7 +200,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global state, sent_pairs, cooldown
     query=update.callback_query; await query.answer(); cid=str(query.from_user.id)
-    if not is_authed(cid): await query.edit_message_text("🔐 انتهت الجلسة\n\nمرحباً MAD BEAR BOT 🐻\nأرسل الرقم السري للدخول:"); return
+    if not is_authed(cid): await query.edit_message_text("🔐 انتهت الجلسة\nأرسل الرقم السري:"); return
     now=time.time()
     if query.data in ["best","analyze","status"]:
         if cooldown.get(cid,0)>now: await query.answer(f"⏳ انتظر {int(cooldown[cid]-now)}ث",show_alert=True); return
@@ -188,21 +210,23 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if is_news: await query.edit_message_text(f"📰 {reason}\nلا تتداول الآن",reply_markup=main_keyboard()); return
         await query.edit_message_text("🔍 يبحث عن أفضل إشارة LIVE ⭐")
         best,rest=get_best()
-        if not best: await context.bot.send_message(chat_id=int(cid),text="⚪ لا يوجد إشارات قوية حالياً Score>=60",reply_markup=main_keyboard()); return
+        if not best: await context.bot.send_message(chat_id=int(cid),text="⚪ لا يوجد إشارات قوية حالياً",reply_markup=main_keyboard()); return
         if sent_pairs.get(best['pair'],0)>now-600: await context.bot.send_message(chat_id=int(cid),text=f"⚪ {best['pair']} أرسلت قبل قليل",reply_markup=main_keyboard()); return
-        chart=create_chart(best,True); arrow="⬆️" if best['signal']=="CALL" else "⬇️"
-        msg=f"""⭐ أفضل إشارة LIVE ⭐
-━━━━━━━━━━━━━━━
-💱 {best['pair']} (سوق حقيقي)
-📊 {best['signal']} {arrow} | 3M M5+H1
-💰 {best['price']:.5f}
-📈 {best['reason']}
-🎯 {best['conf']}% | ⭐ {best['score']:.0f}/100
-RSI M5 {best['rsi_m5']:.0f} H1 {best['rsi_h1']:.0f} ({best['h1_trend']})
+        chart=create_chart(best,True)
+        emoji = "🟢 ⬆️" if best['signal']=="CALL" else "🔴 ⬇️"
+        msg=f"""⭐ {best['pair']} {best['signal']} {emoji} {best['conf']}% Score {best['score']}
+{best['reason']}
+
+💰 دخول: {best['price']:.5f}
+⏱️ 3M | 📊 M5+H1
+🎯 {best['score_label']}
 🕐 {best['time']} UTC"""
         if chart and os.path.exists(chart):
             with open(chart,'rb') as p: await context.bot.send_photo(chat_id=int(cid),photo=p,caption=msg,reply_markup=main_keyboard())
-        else: await context.bot.send_message(chat_id=int(cid),text=msg,reply_markup=main_keyboard())
+            try: os.remove(chart)
+            except: pass
+        else:
+            await context.bot.send_message(chat_id=int(cid),text=msg,reply_markup=main_keyboard())
         sent_pairs[best['pair']]=now; state["sent"]=sent_pairs; save_state(state)
     elif query.data=="analyze":
         await query.edit_message_text("🔍 يفحص...")
@@ -212,13 +236,18 @@ RSI M5 {best['rsi_m5']:.0f} H1 {best['rsi_h1']:.0f} ({best['h1_trend']})
         for r in all_s[:3]:
             if sent_pairs.get(r['pair'],0)>now-600: continue
             chart=create_chart(r,r==best)
-            msg=f"{'⭐ BEST ' if r==best else ''}{r['pair']} {r['signal']} {r['conf']}%"
+            emoji = "🟢 ⬆️" if r['signal']=="CALL" else "🔴 ⬇️"
+            msg=f"⭐ {r['pair']} {r['signal']} {emoji} {r['conf']}% Score {r['score']}\n{r['reason']}\n🎯 {r['score_label']}"
             if chart and os.path.exists(chart):
                 with open(chart,'rb') as p: await context.bot.send_photo(chat_id=int(cid),photo=p,caption=msg)
-            else: await context.bot.send_message(chat_id=int(cid),text=msg)
+                try: os.remove(chart)
+                except: pass
+            else:
+                await context.bot.send_message(chat_id=int(cid),text=msg)
+        await context.bot.send_message(chat_id=int(cid),text="✅ انتهى",reply_markup=main_keyboard())
     elif query.data=="status":
         is_news,nr=is_news_time(); best,_=get_best(); bt=f"{best['pair']} {best['conf']}%" if best else "لا يوجد"
-        await query.edit_message_text(f"📊 V7 LIVE\n⭐ أفضل: {bt}\n📰 {nr if is_news else 'وقت آمن ✅'}\n⏰ {datetime.now().strftime('%H:%M:%S')} UTC",reply_markup=main_keyboard())
+        await query.edit_message_text(f"📊 V8 NEW STYLE\n⭐ أفضل: {bt}\n📰 {nr if is_news else 'وقت آمن ✅'}\n⏰ {datetime.now().strftime('%H:%M:%S')} UTC",reply_markup=main_keyboard())
     elif query.data=="news":
         is_news,reason=is_news_time(); await query.edit_message_text(f"📰 {reason if is_news else '✅ وقت آمن'}",reply_markup=main_keyboard())
     elif query.data in ["pause","resume"]:
@@ -235,16 +264,25 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
         if not best or sent_pairs.get(best['pair'],0)>now-600: continue
         try:
             chart=create_chart(best,True)
-            msg=f"⭐ {best['pair']} {best['signal']} {best['conf']}% Score {best['score']:.0f}\n{best['reason']}"
+            emoji = "🟢 ⬆️" if best['signal']=="CALL" else "🔴 ⬇️"
+            msg=f"""⭐ {best['pair']} {best['signal']} {emoji} {best['conf']}% Score {best['score']}
+{best['reason']}
+
+💰 {best['price']:.5f} | ⏱️ 3M
+🎯 {best['score_label']}"""
             if chart and os.path.exists(chart):
                 with open(chart,'rb') as p: await context.bot.send_photo(chat_id=int(cid),photo=p,caption=msg)
-            else: await context.bot.send_message(chat_id=int(cid),text=msg)
+                try: os.remove(chart)
+                except: pass
+            else:
+                await context.bot.send_message(chat_id=int(cid),text=msg)
             sent_pairs[best['pair']]=now; state["sent"]=sent_pairs; save_state(state)
-        except: pass
+        except Exception as e:
+            logging.error(f"auto {e}"); pass
 
 flask_app=Flask(__name__)
 @flask_app.route('/')
-def home(): return "MAD BEAR FINAL CLEAN"
+def home(): return "MAD BEAR V8 NEW STYLE WITH FLAGS"
 def run_flask(): flask_app.run(host="0.0.0.0",port=int(os.getenv("PORT",10000)))
 def main():
     if not BOT_TOKEN: logging.error("Missing TOKEN"); return
@@ -254,6 +292,6 @@ def main():
     app.add_handler(CallbackQueryHandler(buttons))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,handle_message))
     app.job_queue.run_repeating(check_signals,interval=60,first=20)
-    logging.info("FINAL CLEAN - NO PASSWORD SHOWN")
+    logging.info("V8 NEW STYLE WITH FLAGS AND CHART")
     app.run_polling()
 if __name__=="__main__": main()
