@@ -277,13 +277,19 @@ def run_flask():
 
 
 
+def clean(context):
+    try:
+        # dummy clean
+        pass
+    except: pass
+
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(buttons))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.job_queue.run_repeating(check_signals, interval=30, first=20)
-    app.job_queue.run_repeating(clean, interval=3600, first=10)
+    # clean job removed - not needed
     logging.info("V29 SINGLE FILE - 5MIN - NO HEADER - LIVE WITH BUTTONS")
     app.run_polling(drop_pending_updates=True, close_loop=False)
 
