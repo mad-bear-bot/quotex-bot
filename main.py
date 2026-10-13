@@ -5,10 +5,9 @@ import threading
 
 flask_app = Flask(__name__)
 @flask_app.route('/')
-def home(): return 'V27 FULL - 5MIN - NO HEADER - WITH BUTTONS'
+def home(): return 'V28 FULL - FIXED NameError - 5MIN NO HEADER'
 @flask_app.route('/health')
 def health(): return 'OK'
-
 def run_flask():
     flask_app.run(host='0.0.0.0', port=10000, debug=False, use_reloader=False)
 
@@ -24,25 +23,11 @@ except: pass
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
-import asyncio
 
-# استيراد التحليل من ملفك
-try:
-    from main_V23_FINAL import analyze, format_message, setup_bear_images, BEAR_BUY_PATH, BEAR_SELL_PATH, SYMBOLS, state
-except:
-    try:
-        from main_V22_SINGLE import analyze, format_message, setup_bear_images, BEAR_BUY_PATH, BEAR_SELL_PATH, SYMBOLS, state
-    except:
-        SYMBOLS = ["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","EUR/JPY"]
-        state = {"auth":{},"paused":{},"main_keyboard":True}
-        def analyze(s): return None
-        def format_message(r): return f"{r}"
-        def setup_bear_images(): pass
-        BEAR_BUY_PATH = "buy.jpg"
-        BEAR_SELL_PATH = "sell.jpg"
+# استيراد التحليل
+from main_V23_FINAL import analyze, format_message, setup_bear_images, BEAR_BUY_PATH, BEAR_SELL_PATH, SYMBOLS, state, CLEAN_MODE, BEAR_IMAGES_SETUP
 
 logging.basicConfig(level=logging.INFO)
-
 last_trade_end = {}
 
 async def check_signals(context: ContextTypes.DEFAULT_TYPE):
@@ -67,7 +52,6 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
             msg=format_message(best)
             setup_bear_images()
             img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
-            # بدون اي كلمة فوق الاشارة - نظيف
             try:
                 if os.path.exists(img):
                     await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f"{msg}")
@@ -76,17 +60,11 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
             except:
                 await context.bot.send_message(chat_id=int(cid),text=f"{msg}")
             last_trade_end[cid]=now
-            logging.info(f"V27 sent {best['pair']} to {cid} next in 5 min")
+            logging.info(f"V28 sent {best['pair']} to {cid}")
         except Exception as e:
             logging.error(f"auto error {e}")
 
-# ===== Handlers الاصلية كاملة =====
-def get_main_keyboard():
-    return ReplyKeyboardMarkup(
-        [["تشغيل ▶️","إيقاف ⏸️"],["📊 الإحصائيات","⚙️ الإعدادات"]],
-        resize_keyboard=True
-    )
-
+# ===== Handlers الاصلية من V23 =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
     except: pass
@@ -109,7 +87,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query; await query.answer(); cid=str(query.from_user.id)
     if not is_authed(cid): return
     if query.data=="best":
-        await query.edit_message_text("🔍 ي...")
+        await query.edit_message_text("🔍 يفحص 6 أسواق...")
         best,_=get_best()
         if not best:
             await context.bot.send_message(chat_id=int(cid),text="⚪ لا يوجد بيانات حاليا - حاول بعد دقيقة",reply_markup=main_keyboard())
@@ -117,7 +95,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg=format_message(best); setup_bear_images(); img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
         await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=msg,reply_markup=main_keyboard()) if os.path.exists(img) else await context.bot.send_message(chat_id=int(cid),text=msg,reply_markup=main_keyboard())
     elif query.data=="analyze":
-        await query.edit_message_text("🔍 ي...")
+        await query.edit_message_text("🔍 يفحص 6 أسواق...")
         best,rest=get_best(); all_s=([best]+rest) if best else []
         setup_bear_images()
         for r in all_s[:6]:
@@ -126,7 +104,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: await context.bot.send_message(chat_id=int(cid),text=msg)
         await context.bot.send_message(chat_id=int(cid),text="✅ انتهى",reply_markup=main_keyboard())
     elif query.data=="status":
-        best,_=get_best(); txt="📊  - كل 5 دق\n\n"
+        best,_=get_best(); txt="📊 V16 - كل 5 دق\n\n"
         for i,s in enumerate(SYMBOLS,1): txt+=f"{i}. {NAMES[s]}\n"
         if best: txt+=f"\n⭐ {best['pair']} {best['alignment']} Score {best['score']}"
         await query.edit_message_text(txt,reply_markup=main_keyboard())
@@ -140,12 +118,12 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
         best,_=get_best()
         if not best:
             logging.warning("get_best None - sending test")
-            await context.bot.send_message(chat_id=int(cid), text="🔄 AUTO TEST - البوت شغال ✅\nسيتم الإرسال بعد 5 دق")
+            await context.bot.send_message(chat_id=int(cid), text=" AUTO TEST - البوت شغال ✅\nسيتم الإرسال بعد 5 دق")
             continue
         try:
             msg=format_message(best); setup_bear_images(); img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
-            if os.path.exists(img): await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f" - \n\n{msg}")
-            else: await context.bot.send_message(chat_id=int(cid),text=f"{msg}")
+            if os.path.exists(img): await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f" اشارة كل 5 دق - V16\n\n{msg}")
+            else: await context.bot.send_message(chat_id=int(cid),text=f" اشارة كل 5 دق\n\n{msg}")
         except Exception as e: logging.error(f"auto {e}")
 
 flask_app=Flask(__name__)
@@ -160,10 +138,11 @@ def run_flask():
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    app.add_handler(CallbackQueryHandler(buttons))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.job_queue.run_repeating(check_signals, interval=30, first=20)
-    logging.info("V27 FULL WITH BUTTONS - 5MIN - NO HEADER - LIVE")
+    app.job_queue.run_repeating(clean, interval=3600, first=10)
+    logging.info("V28 FULL - 5MIN CYCLE - NO HEADER - WITH ALL BUTTONS")
     app.run_polling(drop_pending_updates=True, close_loop=False)
 
 if __name__=="__main__":
