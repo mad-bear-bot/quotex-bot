@@ -292,6 +292,6 @@ def main():
     app.add_handler(CallbackQueryHandler(buttons))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,handle_message))
     app.job_queue.run_repeating(check_signals,interval=60,first=20)
-    logging.info("V8 NEW STYLE WITH FLAGS AND CHART")
-    app.run_polling(drop_pending_updates=True)
+    logging.info("V8 FINAL FIX CONFLICT")
+app.run_polling(drop_pending_updates=True, close_loop=False)
 if __name__=="__main__": main()
