@@ -1,4 +1,4 @@
-import os, logging, json, time, base64
+import os, logging, json, time, base64, asyncio
 from datetime import datetime, timezone, timedelta
 import yfinance as yf
 import numpy as np
@@ -18,10 +18,8 @@ BEAR_SELL_PATH = "/tmp/bear_sell.jpg"
 
 def setup_bear_images():
     try:
-        if not os.path.exists(BEAR_BUY_PATH):
-            open(BEAR_BUY_PATH,"wb").write(base64.b64decode(BEAR_BUY_B64))
-        if not os.path.exists(BEAR_SELL_PATH):
-            open(BEAR_SELL_PATH,"wb").write(base64.b64decode(BEAR_SELL_B64))
+        open(BEAR_BUY_PATH,"wb").write(base64.b64decode(BEAR_BUY_B64))
+        open(BEAR_SELL_PATH,"wb").write(base64.b64decode(BEAR_SELL_B64))
     except: pass
 
 SYMBOLS = ["CADCHF=X", "EURUSD=X", "CHFJPY=X", "USDCHF=X", "EURJPY=X", "USDCAD=X"]
@@ -30,19 +28,14 @@ CLEAN = {"CADCHF=X":"CAD/CHF","EURUSD=X":"EUR/USD","CHFJPY=X":"CHF/JPY","USDCHF=
 FLAGS = {"CADCHF=X":"🇨🇦🇨🇭","EURUSD=X":"🇪🇺🇺🇸","CHFJPY=X":"🇨🇭🇯🇵","USDCHF=X":"🇺🇸🇨🇭","EURJPY=X":"🇪🇺🇯🇵","USDCAD=X":"🇺🇸🇨🇦"}
 PAYOUT = {"CADCHF=X":"91%","EURUSD=X":"90%","CHFJPY=X":"86%","USDCHF=X":"86%","EURJPY=X":"76%","USDCAD=X":"82%"}
 
-STATE_FILE = "/tmp/bot_v14.json"
+STATE_FILE = "/tmp/bot_v15.json"
 def load_state():
-    try:
-        import json; 
-        return json.load(open(STATE_FILE))
+    try: return json.load(open(STATE_FILE))
     except: return {"auth":{},"sent":{},"cooldown":{},"paused":{}}
 def save_state(s):
-    try:
-        import json; json.dump(s, open(STATE_FILE,"w"))
+    try: json.dump(s, open(STATE_FILE,"w"))
     except: pass
 state=load_state()
-sent_pairs=state.get("sent",{})
-cooldown=state.get("cooldown",{})
 import logging; logging.basicConfig(level=logging.INFO)
 
 def calculate_rsi(prices, period=14):
@@ -71,8 +64,8 @@ def get_trend(symbol, tf="1h"):
 
 def analyze(symbol):
     try:
-        trend_1h, rsi_1h = get_trend(symbol, "1h")
-        trend_15m, rsi_15m = get_trend(symbol, "15m")
+        trend_1h, _ = get_trend(symbol, "1h")
+        trend_15m, _ = get_trend(symbol, "15m")
         df_5m = yf.download(symbol, period="2d", interval="5m", progress=False, auto_adjust=True)
         if len(df_5m)<60: return None
         try:
@@ -82,8 +75,7 @@ def analyze(symbol):
         last_close=float(closes[-1]); last_open=float(opens[-1])
         rsi_m5=calculate_rsi(closes)
         prev_high=float(highs[-20:-1].max()); prev_low=float(lows[-20:-1].min())
-        body_size=abs(last_close-last_open); avg_body=np.mean(np.abs(closes[-15:]-opens[-15:]))
-        strong_body = body_size > avg_body*0.5
+        strong_body = abs(last_close-last_open) > np.mean(np.abs(closes[-15:]-opens[-15:]))*0.5
         signal=None; bos_score=0; bos_text=""
         if last_close > prev_high and last_close > last_open:
             signal="CALL"; bos_score=50 if strong_body else 35; bos_text="BOS + Strong Bullish Candle 🟢" if strong_body else "BOS + Bullish Candle 🟢"
@@ -111,29 +103,21 @@ def analyze(symbol):
             mtf_score+=5; t1h="Neutral ⚪"
         else:
             t1h="Opposite ❌"
-        ob_score=10 if (closes[-1]>closes[-2]>closes[-3] or closes[-1]<closes[-2]<closes[-3]) else 0
-        fvg_score=5 if (lows[-1]>highs[-3] or highs[-1]<lows[-3]) else 0
-        rsi_score=10 if (40 <= rsi_m5 <= 70) else 0
-        total = bos_score + mtf_score + ob_score + fvg_score + rsi_score
+        total = bos_score + mtf_score + (10 if closes[-1]>closes[-2]>closes[-3] or closes[-1]<closes[-2]<closes[-3] else 0) + (5 if lows[-1]>highs[-3] or highs[-1]<lows[-3] else 0) + (10 if 40 <= rsi_m5 <= 70 else 0)
         if total >= 85: conf=89; strength="STRONG 🔥"; conf_text="قوي جدا"
         elif total >= 70: conf=80; strength="GOOD 💪"; conf_text="جيد"
         elif total >= 55: conf=68; strength="MEDIUM ⚠️"; conf_text="متوسط"
         else: conf=55; strength="WEAK ⚠️"; conf_text="ضعيف"
-        market_structure = "BULLISH" if signal=="CALL" else "BEARISH"
         now_utc = datetime.now(timezone.utc)
-        expiry_utc = now_utc + timedelta(minutes=3)
-        return {"pair":CLEAN.get(symbol, symbol),"flag":FLAGS.get(symbol,""),"flag_pair":NAMES.get(symbol, symbol),"payout":PAYOUT.get(symbol,""),"symbol":symbol,"signal":signal,"conf":conf,"score":total,"price":last_close,"bos_text":bos_text,"t15":t15,"t1h":t1h,"alignment":f"{alignment}/3","align_num":alignment,"market_structure":market_structure,"strength":strength,"conf_text":conf_text,"expiry":expiry_utc.strftime('%H:%M:%S UTC'),"rsi_m5":rsi_m5,}
+        return {"pair":CLEAN.get(symbol, symbol),"flag":FLAGS.get(symbol,""),"payout":PAYOUT.get(symbol,""),"signal":signal,"conf":conf,"score":total,"price":last_close,"bos_text":bos_text,"t15":t15,"t1h":t1h,"alignment":f"{alignment}/3","align_num":alignment,"market_structure":"BULLISH" if signal=="CALL" else "BEARISH","strength":strength,"conf_text":conf_text,"expiry":(now_utc + timedelta(minutes=3)).strftime("%H:%M:%S UTC"),"rsi_m5":rsi_m5}
     except Exception as e:
         logging.error(f"analyze {symbol} {e}")
         return None
 
 def get_best():
-    all_s=[]
-    for sym in SYMBOLS:
-        r=analyze(sym)
-        if r: all_s.append(r)
+    all_s=[r for r in [analyze(s) for s in SYMBOLS] if r]
     if not all_s: return None,[]
-    all_s.sort(key=lambda x:(x["align_num"], x["score"], x["conf"]), reverse=True)
+    all_s.sort(key=lambda x:(x["align_num"], x["score"]), reverse=True)
     return all_s[0], all_s[1:]
 
 def format_message(r):
@@ -161,24 +145,15 @@ def format_message(r):
 
 def is_authed(cid): return str(cid) in state.get("auth",{}) and state["auth"][str(cid)]
 def main_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("كل الاسواق 📊",callback_data="analyze"), InlineKeyboardButton("أشارة الان 🔥",callback_data="best")],
-        [InlineKeyboardButton("ايقاف ⏸️",callback_data="pause"), InlineKeyboardButton("تشغيل ▶️",callback_data="resume")],
-        [InlineKeyboardButton("حالة 📈",callback_data="status")]
-    ])
+    return InlineKeyboardMarkup([[InlineKeyboardButton("كل الاسواق 📊",callback_data="analyze"), InlineKeyboardButton("أشارة الان 🔥",callback_data="best")],[InlineKeyboardButton("ايقاف ⏸️",callback_data="pause"), InlineKeyboardButton("تشغيل ▶️",callback_data="resume")],[InlineKeyboardButton("حالة 📈",callback_data="status")]])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
     except: pass
     cid=str(update.effective_chat.id)
     if is_authed(cid):
-        txt="🐻 MAD BEAR V14 FIXED - كل 5 دق اشارة إجباري\n\n"
-        for i,s in enumerate(SYMBOLS,1):
-            txt+=f"{i}. {NAMES[s]}\n"
-        txt+="\n🔄 AUTO كل 5 دقايق يرسل\n✅ ما يوقف أبدا"
-        await context.bot.send_message(chat_id=cid, text=txt, reply_markup=main_keyboard())
-    else:
-        await context.bot.send_message(chat_id=cid, text="🐻 MAD BEAR\n\n🔐 أرسل الرقم السري:")
+        await context.bot.send_message(chat_id=cid, text="🐻 MAD BEAR V15\n\n✅ القائمة الرئيسية", reply_markup=main_keyboard())
+    else: await context.bot.send_message(chat_id=cid, text="🐻 MAD BEAR\n\n🔐 أرسل الرقم السري:")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global state
@@ -187,62 +162,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except: pass
     if text==BOT_PASSWORD:
         state["auth"][cid]=True; save_state(state)
-        txt="تم 🔑 V14 FIXED\n\n"
-        for i,s in enumerate(SYMBOLS,1):
-            txt+=f"{i}. {NAMES[s]}\n"
-        await context.bot.send_message(chat_id=cid, text=txt, reply_markup=main_keyboard())
+        await context.bot.send_message(chat_id=cid, text="تم فتح البوت 🔑\nالقائمة الرئيسية", reply_markup=main_keyboard())
 
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global state, cooldown
+    global state
     query=update.callback_query; await query.answer(); cid=str(query.from_user.id)
     if not is_authed(cid): return
-    now=time.time()
-    if query.data in ["best","analyze","status"]:
-        if cooldown.get(cid,0)>now:
-            await query.answer(f"⏳ {int(cooldown[cid]-now)}ث",show_alert=True); return
-        cooldown[cid]=now+10; state["cooldown"]=cooldown; save_state(state)
     if query.data=="best":
-        await query.edit_message_text("🔍 V14 FIXED يفحص 6 أسواق...")
-        best,rest=get_best()
-        if not best:
-            await context.bot.send_message(chat_id=int(cid),text="⚪ لا يوجد حتى اشارة ضعيفة - السوق ميت",reply_markup=main_keyboard()); return
+        await query.edit_message_text("🔍 V15 يفحص 6 أسواق...")
+        best,_=get_best()
+        if not best: await context.bot.send_message(chat_id=int(cid),text="⚪ لا يوجد",reply_markup=main_keyboard()); return
         msg=format_message(best)
         setup_bear_images()
-        img_path=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
-        if os.path.exists(img_path):
-            await context.bot.send_photo(chat_id=int(cid),photo=open(img_path,"rb"),caption=msg,reply_markup=main_keyboard())
-        else:
-            await context.bot.send_message(chat_id=int(cid),text=msg,reply_markup=main_keyboard())
+        img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
+        await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=msg,reply_markup=main_keyboard()) if os.path.exists(img) else await context.bot.send_message(chat_id=int(cid),text=msg,reply_markup=main_keyboard())
     elif query.data=="analyze":
         await query.edit_message_text("🔍 يفحص 6 أسواق...")
         best,rest=get_best()
         all_s=([best]+rest) if best else []
-        if not all_s:
-            await context.bot.send_message(chat_id=int(cid),text="⚪ لا يوجد",reply_markup=main_keyboard()); return
         setup_bear_images()
         for r in all_s[:6]:
-            msg=format_message(r)
-            img_path=BEAR_BUY_PATH if r["signal"]=="CALL" else BEAR_SELL_PATH
-            try:
-                if os.path.exists(img_path):
-                    await context.bot.send_photo(chat_id=int(cid),photo=open(img_path,"rb"),caption=msg)
-                else:
-                    await context.bot.send_message(chat_id=int(cid),text=msg)
-            except:
-                await context.bot.send_message(chat_id=int(cid),text=msg)
+            msg=format_message(r); img=BEAR_BUY_PATH if r["signal"]=="CALL" else BEAR_SELL_PATH
+            try: await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=msg)
+            except: await context.bot.send_message(chat_id=int(cid),text=msg)
         await context.bot.send_message(chat_id=int(cid),text="✅ انتهى",reply_markup=main_keyboard())
     elif query.data=="status":
         best,_=get_best()
-        txt="📊 V14 FIXED - اشارة كل 5 دق\n\n"
-        for i,s in enumerate(SYMBOLS,1):
-            txt+=f"{i}. {NAMES[s]}\n"
-        if best:
-            pair=best["pair"]; al=best["alignment"]; sc=best["score"]
-            txt+=f"\n⭐ الحالي: {pair} {al} Score {sc}\n⏰ {datetime.now().strftime('%H:%M:%S')} UTC\n🔄 AUTO كل 5 دق"
+        txt="📊 V15 - كل 5 دق\n\n"
+        for i,s in enumerate(SYMBOLS,1): txt+=f"{i}. {NAMES[s]}\n"
+        if best: txt+=f"\n⭐ {best['pair']} {best['alignment']} Score {best['score']}"
         await query.edit_message_text(txt,reply_markup=main_keyboard())
     elif query.data in ["pause","resume"]:
         state["paused"][cid]=query.data=="pause"; save_state(state)
-        await query.edit_message_text("⏸️ إيقاف AUTO" if query.data=="pause" else "▶️ تشغيل AUTO كل 5 دق ✅",reply_markup=main_keyboard())
+        await query.edit_message_text("⏸️ إيقاف" if query.data=="pause" else "▶️ تشغيل AUTO كل 5 دق ✅",reply_markup=main_keyboard())
 
 async def check_signals(context: ContextTypes.DEFAULT_TYPE):
     for cid,ok in list(state.get("auth",{}).items()):
@@ -250,31 +202,36 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
         best,_=get_best()
         if not best: continue
         try:
-            msg=format_message(best)
-            setup_bear_images()
-            img_path=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
-            if os.path.exists(img_path):
-                await context.bot.send_photo(chat_id=int(cid),photo=open(img_path,"rb"),caption=f"🔄 اشارة كل 5 دق - V14 FIXED\n\n{msg}")
-            else:
-                await context.bot.send_message(chat_id=int(cid),text=f"🔄 اشارة كل 5 دق - V14 FIXED\n\n{msg}")
-        except Exception as e:
-            logging.error(f"auto {e}")
+            msg=format_message(best); setup_bear_images(); img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
+            if os.path.exists(img): await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f"🔄 اشارة كل 5 دق - V15\n\n{msg}")
+            else: await context.bot.send_message(chat_id=int(cid),text=f"🔄 اشارة كل 5 دق\n\n{msg}")
+        except Exception as e: logging.error(f"auto {e}")
 
 flask_app=Flask(__name__)
 @flask_app.route("/")
-def home(): return "MAD BEAR V14 FIXED"
+def home(): return "MAD BEAR V15"
 def run_flask(): flask_app.run(host="0.0.0.0",port=int(os.getenv("PORT",10000)))
+
+async def delete_webhook():
+    try:
+        tmp_app = Application.builder().token(BOT_TOKEN).build()
+        await tmp_app.bot.delete_webhook(drop_pending_updates=True)
+        await tmp_app.bot.close()
+        logging.info("Webhook deleted - No Conflict")
+    except Exception as e: logging.error(f"delete webhook {e}")
 
 def main():
     if not BOT_TOKEN: logging.error("Missing TOKEN"); return
     Thread(target=run_flask,daemon=True).start()
     setup_bear_images()
+    try: asyncio.run(delete_webhook())
+    except: pass
     app=Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start",start))
     app.add_handler(CallbackQueryHandler(buttons))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,handle_message))
     app.job_queue.run_repeating(check_signals,interval=300,first=30)
-    logging.info("V14 FIXED READY")
-    app.run_polling(drop_pending_updates=True)
+    logging.info("V15 READY - NO CONFLICT")
+    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
 
 if __name__=="__main__": main()
