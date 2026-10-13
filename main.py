@@ -95,17 +95,17 @@ def analyze_v7(symbol):
         ob_bull=len(closes)>6 and closes[-1]>closes[-2]>closes[-3]; ob_bear=len(closes)>6 and closes[-1]<closes[-2]<closes[-3]
         fvg_bull=len(lows)>4 and lows[-1]>highs[-3]; fvg_bear=len(highs)>4 and highs[-1]<lows[-3]
         h1_trend,_,rsi_h1,_=get_h1_trend(symbol)
-        score=0; bos_text=""; reasons=[]
+        score=0; bos_text=""
         if bullish_body:
-            score+=40; bos_text="BOS 🟢 ⬆️"; reasons.append("BOS صاعد")
+            score+=40; bos_text="BOS 🟢 ⬆️"
         elif bullish_wick:
-            score+=25; bos_text="BOS 🟢 ⬆️"; reasons.append("BOS صاعد")
+            score+=25; bos_text="BOS 🟢 ⬆️"
         if bearish_body:
-            score+=40; bos_text="BOS 🔴 ⬇️"; reasons.append("BOS هابط")
+            score+=40; bos_text="BOS 🔴 ⬇️"
         elif bearish_wick:
-            score+=25; bos_text="BOS 🔴 ⬇️"; reasons.append("BOS هابط")
-        if ob_bull or ob_bear: score+=20; reasons.append("Order Block")
-        if fvg_bull or fvg_bear: score+=15; reasons.append("FVG")
+            score+=25; bos_text="BOS 🔴 ⬇️"
+        if ob_bull or ob_bear: score+=20
+        if fvg_bull or fvg_bear: score+=15
         signal=None
         if bullish_body or bullish_wick:
             signal="CALL"
@@ -123,7 +123,7 @@ def analyze_v7(symbol):
         score_label = get_score_label(score)
         reason_display = f"{bos_text} {score_label} + Order Block" if (ob_bull or ob_bear) else f"{bos_text} {score_label}"
         if fvg_bull or fvg_bear: reason_display += " + FVG"
-        return {"pair":clean,"symbol":symbol,"signal":signal,"conf":conf,"price":last_close,"reason":reason_display,"score":score,"score_label":score_label,"bos_text":bos_text,"time":datetime.now().strftime("%H:%M"),"df":df.tail(80),"rsi_m5":rsi_m5,"rsi_h1":rsi_h1,"h1_trend":h1_trend,"is_body":bullish_body or bearish_body,"prev_high":prev_high,"prev_low":prev_low}
+        return {"pair":clean,"symbol":symbol,"signal":signal,"conf":conf,"price":last_close,"reason":reason_display,"score":score,"score_label":score_label,"bos_text":bos_text,"time":datetime.now().strftime("%H:%M"),"df":df.tail(80),"rsi_m5":rsi_m5,"rsi_h1":rsi_h1,"h1_trend":h1_trend}
     except Exception as e:
         logging.error(f"analyze {e}"); return None
 
@@ -282,7 +282,7 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
 
 flask_app=Flask(__name__)
 @flask_app.route('/')
-def home(): return "MAD BEAR V8 NEW STYLE WITH FLAGS"
+def home(): return "MAD BEAR V8 FIXED"
 def run_flask(): flask_app.run(host="0.0.0.0",port=int(os.getenv("PORT",10000)))
 def main():
     if not BOT_TOKEN: logging.error("Missing TOKEN"); return
@@ -292,6 +292,7 @@ def main():
     app.add_handler(CallbackQueryHandler(buttons))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,handle_message))
     app.job_queue.run_repeating(check_signals,interval=60,first=20)
-    logging.info("V8 FINAL FIX CONFLICT")
-app.run_polling(drop_pending_updates=True, close_loop=False)
+    logging.info("V8 FIXED READY")
+    app.run_polling(drop_pending_updates=True)
+
 if __name__=="__main__": main()
