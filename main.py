@@ -1,4 +1,4 @@
-import os, logging, json, time, base64, asyncio
+import os, logging, json, time, base64
 from datetime import datetime, timezone, timedelta
 import yfinance as yf
 import numpy as np
@@ -28,15 +28,15 @@ CLEAN = {"CADCHF=X":"CAD/CHF","EURUSD=X":"EUR/USD","CHFJPY=X":"CHF/JPY","USDCHF=
 FLAGS = {"CADCHF=X":"🇨🇦🇨🇭","EURUSD=X":"🇪🇺🇺🇸","CHFJPY=X":"🇨🇭🇯🇵","USDCHF=X":"🇺🇸🇨🇭","EURJPY=X":"🇪🇺🇯🇵","USDCAD=X":"🇺🇸🇨🇦"}
 PAYOUT = {"CADCHF=X":"91%","EURUSD=X":"90%","CHFJPY=X":"86%","USDCHF=X":"86%","EURJPY=X":"76%","USDCAD=X":"82%"}
 
-STATE_FILE = "/tmp/bot_v15.json"
+STATE_FILE = "/tmp/bot_v16.json"
 def load_state():
     try: return json.load(open(STATE_FILE))
-    except: return {"auth":{},"sent":{},"cooldown":{},"paused":{}}
+    except: return {"auth":{},"cooldown":{},"paused":{}}
 def save_state(s):
     try: json.dump(s, open(STATE_FILE,"w"))
     except: pass
 state=load_state()
-import logging; logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 
 def calculate_rsi(prices, period=14):
     try:
@@ -64,9 +64,9 @@ def get_trend(symbol, tf="1h"):
 
 def analyze(symbol):
     try:
-        trend_1h, _ = get_trend(symbol, "1h")
-        trend_15m, _ = get_trend(symbol, "15m")
-        df_5m = yf.download(symbol, period="2d", interval="5m", progress=False, auto_adjust=True)
+        trend_1h,_=get_trend(symbol,"1h")
+        trend_15m,_=get_trend(symbol,"15m")
+        df_5m=yf.download(symbol, period="2d", interval="5m", progress=False, auto_adjust=True)
         if len(df_5m)<60: return None
         try:
             if hasattr(df_5m.columns,"levels"): df_5m.columns=df_5m.columns.get_level_values(0)
@@ -109,7 +109,7 @@ def analyze(symbol):
         elif total >= 55: conf=68; strength="MEDIUM ⚠️"; conf_text="متوسط"
         else: conf=55; strength="WEAK ⚠️"; conf_text="ضعيف"
         now_utc = datetime.now(timezone.utc)
-        return {"pair":CLEAN.get(symbol, symbol),"flag":FLAGS.get(symbol,""),"payout":PAYOUT.get(symbol,""),"signal":signal,"conf":conf,"score":total,"price":last_close,"bos_text":bos_text,"t15":t15,"t1h":t1h,"alignment":f"{alignment}/3","align_num":alignment,"market_structure":"BULLISH" if signal=="CALL" else "BEARISH","strength":strength,"conf_text":conf_text,"expiry":(now_utc + timedelta(minutes=3)).strftime("%H:%M:%S UTC"),"rsi_m5":rsi_m5}
+        return {"pair":CLEAN.get(symbol,symbol),"flag":FLAGS.get(symbol,""),"payout":PAYOUT.get(symbol,""),"signal":signal,"conf":conf,"score":total,"price":last_close,"bos_text":bos_text,"t15":t15,"t1h":t1h,"alignment":f"{alignment}/3","align_num":alignment,"market_structure":"BULLISH" if signal=="CALL" else "BEARISH","strength":strength,"conf_text":conf_text,"expiry":(now_utc+timedelta(minutes=3)).strftime("%H:%M:%S UTC"),"rsi_m5":rsi_m5}
     except Exception as e:
         logging.error(f"analyze {symbol} {e}")
         return None
@@ -117,30 +117,30 @@ def analyze(symbol):
 def get_best():
     all_s=[r for r in [analyze(s) for s in SYMBOLS] if r]
     if not all_s: return None,[]
-    all_s.sort(key=lambda x:(x["align_num"], x["score"]), reverse=True)
-    return all_s[0], all_s[1:]
+    all_s.sort(key=lambda x:(x["align_num"],x["score"]),reverse=True)
+    return all_s[0],all_s[1:]
 
 def format_message(r):
-    direction_emoji = "🟢" if r["signal"]=="CALL" else "🔴"
-    arrow = "⬆️" if r["signal"]=="CALL" else "⬇️"
-    compat = "100%" if r["align_num"]==3 else "66%" if r["align_num"]==2 else "33%"
-    status = "ادخل - اشارة قوية" if r["align_num"]==3 else "فكر - اشارة متوسطة" if r["align_num"]==2 else "انتظر - اشارة ضعيفة"
-    icon = "✅" if r["align_num"]==3 else "⚠️" if r["align_num"]==2 else "❌"
-    msg = f"💱 PAIR: {r['pair']} {r['flag']} | PAYOUT: {r['payout']}\n"
-    msg += f"{direction_emoji} DIRECTION: {r['signal']} {arrow}\n"
-    msg += f"🎯 CONFIDENCE: {r['conf']}% ({r['conf_text']})\n"
-    msg += f"⚡ SIGNAL SCORE: {r['score']}/100\n"
-    msg += f"🔗 توافق: {r['alignment']} = {compat} {icon}\n"
-    msg += f"💰 ENTRY PRICE: {r['price']:.5f}\n"
-    msg += f"⏰ EXPIRY: {r['expiry']} (3M)\n\n"
-    msg += f"📊 MULTI-TIMEFRAME ANALYSIS\n\n"
-    msg += f"🔹 5M: {r['bos_text']} | RSI: {r['rsi_m5']:.0f}\n"
-    msg += f"🔹 15M: {r['t15']}\n"
-    msg += f"🔹 1H: {r['t1h']}\n\n"
-    msg += f"🔥 TREND ALIGNMENT: {r['alignment']}\n"
-    msg += f"📈 MARKET STRUCTURE: {r['market_structure']}\n"
-    msg += f"⚡ SIGNAL STRENGTH: {r['strength']}\n\n"
-    msg += f"💡 القرار لك: {status}"
+    direction_emoji="🟢" if r["signal"]=="CALL" else "🔴"
+    arrow="⬆️" if r["signal"]=="CALL" else "⬇️"
+    compat="100%" if r["align_num"]==3 else "66%" if r["align_num"]==2 else "33%"
+    status="ادخل - اشارة قوية" if r["align_num"]==3 else "فكر - اشارة متوسطة" if r["align_num"]==2 else "انتظر - اشارة ضعيفة"
+    icon="✅" if r["align_num"]==3 else "⚠️" if r["align_num"]==2 else "❌"
+    msg=f"💱 PAIR: {r['pair']} {r['flag']} | PAYOUT: {r['payout']}\n"
+    msg+=f"{direction_emoji} DIRECTION: {r['signal']} {arrow}\n"
+    msg+=f"🎯 CONFIDENCE: {r['conf']}% ({r['conf_text']})\n"
+    msg+=f"⚡ SIGNAL SCORE: {r['score']}/100\n"
+    msg+=f"🔗 توافق: {r['alignment']} = {compat} {icon}\n"
+    msg+=f"💰 ENTRY PRICE: {r['price']:.5f}\n"
+    msg+=f"⏰ EXPIRY: {r['expiry']} (3M)\n\n"
+    msg+=f"📊 MULTI-TIMEFRAME ANALYSIS\n\n"
+    msg+=f"🔹 5M: {r['bos_text']} | RSI: {r['rsi_m5']:.0f}\n"
+    msg+=f"🔹 15M: {r['t15']}\n"
+    msg+=f"🔹 1H: {r['t1h']}\n\n"
+    msg+=f"🔥 TREND ALIGNMENT: {r['alignment']}\n"
+    msg+=f"📈 MARKET STRUCTURE: {r['market_structure']}\n"
+    msg+=f"⚡ SIGNAL STRENGTH: {r['strength']}\n\n"
+    msg+=f"💡 القرار لك: {status}"
     return msg
 
 def is_authed(cid): return str(cid) in state.get("auth",{}) and state["auth"][str(cid)]
@@ -152,7 +152,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except: pass
     cid=str(update.effective_chat.id)
     if is_authed(cid):
-        await context.bot.send_message(chat_id=cid, text="🐻 MAD BEAR V15\n\n✅ القائمة الرئيسية", reply_markup=main_keyboard())
+        await context.bot.send_message(chat_id=cid, text="🐻 MAD BEAR V16\n\n✅ القائمة الرئيسية", reply_markup=main_keyboard())
     else: await context.bot.send_message(chat_id=cid, text="🐻 MAD BEAR\n\n🔐 أرسل الرقم السري:")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -169,17 +169,14 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query; await query.answer(); cid=str(query.from_user.id)
     if not is_authed(cid): return
     if query.data=="best":
-        await query.edit_message_text("🔍 V15 يفحص 6 أسواق...")
+        await query.edit_message_text("🔍 يفحص 6 أسواق...")
         best,_=get_best()
         if not best: await context.bot.send_message(chat_id=int(cid),text="⚪ لا يوجد",reply_markup=main_keyboard()); return
-        msg=format_message(best)
-        setup_bear_images()
-        img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
+        msg=format_message(best); setup_bear_images(); img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
         await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=msg,reply_markup=main_keyboard()) if os.path.exists(img) else await context.bot.send_message(chat_id=int(cid),text=msg,reply_markup=main_keyboard())
     elif query.data=="analyze":
         await query.edit_message_text("🔍 يفحص 6 أسواق...")
-        best,rest=get_best()
-        all_s=([best]+rest) if best else []
+        best,rest=get_best(); all_s=([best]+rest) if best else []
         setup_bear_images()
         for r in all_s[:6]:
             msg=format_message(r); img=BEAR_BUY_PATH if r["signal"]=="CALL" else BEAR_SELL_PATH
@@ -187,8 +184,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: await context.bot.send_message(chat_id=int(cid),text=msg)
         await context.bot.send_message(chat_id=int(cid),text="✅ انتهى",reply_markup=main_keyboard())
     elif query.data=="status":
-        best,_=get_best()
-        txt="📊 V15 - كل 5 دق\n\n"
+        best,_=get_best(); txt="📊 V16 - كل 5 دق\n\n"
         for i,s in enumerate(SYMBOLS,1): txt+=f"{i}. {NAMES[s]}\n"
         if best: txt+=f"\n⭐ {best['pair']} {best['alignment']} Score {best['score']}"
         await query.edit_message_text(txt,reply_markup=main_keyboard())
@@ -203,35 +199,25 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
         if not best: continue
         try:
             msg=format_message(best); setup_bear_images(); img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
-            if os.path.exists(img): await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f"🔄 اشارة كل 5 دق - V15\n\n{msg}")
+            if os.path.exists(img): await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f"🔄 اشارة كل 5 دق - V16\n\n{msg}")
             else: await context.bot.send_message(chat_id=int(cid),text=f"🔄 اشارة كل 5 دق\n\n{msg}")
         except Exception as e: logging.error(f"auto {e}")
 
 flask_app=Flask(__name__)
 @flask_app.route("/")
-def home(): return "MAD BEAR V15"
+def home(): return "MAD BEAR V16 STABLE"
 def run_flask(): flask_app.run(host="0.0.0.0",port=int(os.getenv("PORT",10000)))
-
-async def delete_webhook():
-    try:
-        tmp_app = Application.builder().token(BOT_TOKEN).build()
-        await tmp_app.bot.delete_webhook(drop_pending_updates=True)
-        await tmp_app.bot.close()
-        logging.info("Webhook deleted - No Conflict")
-    except Exception as e: logging.error(f"delete webhook {e}")
 
 def main():
     if not BOT_TOKEN: logging.error("Missing TOKEN"); return
     Thread(target=run_flask,daemon=True).start()
     setup_bear_images()
-    try: asyncio.run(delete_webhook())
-    except: pass
     app=Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start",start))
     app.add_handler(CallbackQueryHandler(buttons))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,handle_message))
     app.job_queue.run_repeating(check_signals,interval=300,first=30)
-    logging.info("V15 READY - NO CONFLICT")
-    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
+    logging.info("V16 STABLE READY")
+    app.run_polling(drop_pending_updates=True)
 
 if __name__=="__main__": main()
