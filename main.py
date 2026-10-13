@@ -122,7 +122,7 @@ def analyze(symbol):
         market_structure = "BULLISH" if signal=="CALL" else "BEARISH"
         now_utc = datetime.now(timezone.utc)
         expiry_utc = now_utc + timedelta(minutes=3)
-        return {"pair":CLEAN.get(symbol, symbol),"flag":FLAGS.get(symbol,""),"flag_pair":NAMES.get(symbol, symbol),"payout":PAYOUT.get(symbol,""),"symbol":symbol,"signal":signal,"conf":conf,"score":total,"price":last_close,"bos_text":bos_text,"t15":t15,"t1h":t1h,"alignment":f"{alignment}/3","align_num":alignment,"market_structure":market_structure,"strength":strength,"conf_text":conf_text,"expiry":expiry_utc.strftime("%H:%M:%S UTC"),"rsi_m5":rsi_m5,}
+        return {"pair":CLEAN.get(symbol, symbol),"flag":FLAGS.get(symbol,""),"flag_pair":NAMES.get(symbol, symbol),"payout":PAYOUT.get(symbol,""),"symbol":symbol,"signal":signal,"conf":conf,"score":total,"price":last_close,"bos_text":bos_text,"t15":t15,"t1h":t1h,"alignment":f"{alignment}/3","align_num":alignment,"market_structure":market_structure,"strength":strength,"conf_text":conf_text,"expiry":expiry_utc.strftime('%H:%M:%S UTC'),"rsi_m5":rsi_m5,}
     except Exception as e:
         logging.error(f"analyze {symbol} {e}")
         return None
@@ -161,7 +161,11 @@ def format_message(r):
 
 def is_authed(cid): return str(cid) in state.get("auth",{}) and state["auth"][str(cid)]
 def main_keyboard():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("⭐ اشارة الآن",callback_data="best"), InlineKeyboardButton("📊 كل الأسواق 6",callback_data="analyze")],[InlineKeyboardButton("📈 حالة",callback_data="status"), InlineKeyboardButton("⏸️ إيقاف AUTO",callback_data="pause")],[InlineKeyboardButton("▶️ تشغيل AUTO كل 5 دق",callback_data="resume")]])
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("كل الاسواق 📊",callback_data="analyze"), InlineKeyboardButton("أشارة الان 🔥",callback_data="best")],
+        [InlineKeyboardButton("ايقاف ⏸️",callback_data="pause"), InlineKeyboardButton("تشغيل ▶️",callback_data="resume")],
+        [InlineKeyboardButton("حالة 📈",callback_data="status")]
+    ])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
@@ -234,7 +238,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             txt+=f"{i}. {NAMES[s]}\n"
         if best:
             pair=best["pair"]; al=best["alignment"]; sc=best["score"]
-            txt+=f"\n⭐ الحالي: {pair} {al} Score {sc}\n⏰ {datetime.now().strftime("%H:%M:%S")} UTC\n🔄 AUTO كل 5 دق"
+            txt+=f"\n⭐ الحالي: {pair} {al} Score {sc}\n⏰ {datetime.now().strftime('%H:%M:%S')} UTC\n🔄 AUTO كل 5 دق"
         await query.edit_message_text(txt,reply_markup=main_keyboard())
     elif query.data in ["pause","resume"]:
         state["paused"][cid]=query.data=="pause"; save_state(state)
