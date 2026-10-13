@@ -197,10 +197,18 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
                     if r: all_signals.append(r)
                 except: pass
             if not all_signals: continue
-            strong = [r for r in all_signals if r.get("align_num")==3 and r.get("score",0)>=82 and r.get("conf",0)>=78]
-            if not strong: continue
-            strong.sort(key=lambda x:(x["score"],x["conf"]),reverse=True)
-            best = strong[0]
+            # فلتر جودة - قوية او متوسطة بس
+            strong = [r for r in all_signals if r.get("align_num")==3 and r.get("score",0)>=88 and r.get("conf",0)>=85]
+            medium = [r for r in all_signals if r.get("align_num")>=2 and r.get("score",0)>=84 and r.get("conf",0)>=80]
+            if strong:
+                strong.sort(key=lambda x:(x["score"],x["conf"]),reverse=True)
+                best = strong[0]
+            elif medium:
+                medium.sort(key=lambda x:(x["score"],x["conf"]),reverse=True)
+                best = medium[0]
+                if best["score"] < 85: continue
+            else:
+                continue
             msg=format_message(best)
             setup_bear_images()
             img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
