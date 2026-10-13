@@ -62,7 +62,6 @@ def get_trend(symbol, tf="1h"):
         else: return "neutral",rsi
     except: return "neutral",50
 
-
 def analyze(symbol):
     import random
     now_utc=datetime.now(timezone.utc)
@@ -110,7 +109,6 @@ def analyze(symbol):
     except Exception as e:
         logging.error(f"analyze final {e}")
         return {"pair":CLEAN.get(symbol,symbol),"flag":FLAGS.get(symbol,""),"payout":PAYOUT.get(symbol,""),"signal":"CALL","conf":85,"score":88,"price":1.08543,"bos_text":"BOS UP","t15":"BULL","t1h":"BULL","alignment":"3/3","align_num":3,"market_structure":"BULLISH","strength":"قوية جدا","conf_text":"قوية","expiry":(datetime.now(timezone.utc)+timedelta(minutes=3)).strftime("%H:%M:%S UTC"),"rsi_m5":58.0}
-
 
 def get_best():
     all_s=[r for r in [analyze(s) for s in SYMBOLS] if r]
@@ -202,8 +200,8 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
             continue
         try:
             msg=format_message(best); setup_bear_images(); img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
-            if os.path.exists(img): await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f"🔄 اشارة كل 5 دق - V16\n\n{msg}")
-            else: await context.bot.send_message(chat_id=int(cid),text=f"🔄 اشارة كل 5 دق\n\n{msg}")
+            if os.path.exists(img): await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f"\n\n{msg}")
+            else: await context.bot.send_message(chat_id=int(cid),text=f"🔄 \n\n{msg}")
         except Exception as e: logging.error(f"auto {e}")
 
 flask_app=Flask(__name__)
@@ -217,6 +215,20 @@ def main():
     if not BOT_TOKEN: logging.error("Missing TOKEN"); return
     Thread(target=run_flask,daemon=True).start()
     setup_bear_images()
+    # Anti-conflict: delete webhook and close old connections
+    import asyncio
+    async def clean():
+        from telegram import Bot
+        try:
+            b=Bot(token=BOT_TOKEN)
+            await b.delete_webhook(drop_pending_updates=True)
+            logging.info("Webhook deleted - anti-conflict")
+        except Exception as e:
+            logging.warning(f"clean webhook {e}")
+    try:
+        asyncio.run(clean())
+    except: pass
+    time.sleep(2)
     app=Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start",start))
     app.add_handler(CallbackQueryHandler(buttons))
