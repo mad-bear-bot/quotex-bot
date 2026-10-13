@@ -266,7 +266,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: await context.bot.send_message(chat_id=int(cid),text=msg)
         await context.bot.send_message(chat_id=int(cid),text="✅ انتهى",reply_markup=main_keyboard())
     elif query.data=="status":
-        best,_=get_best(); txt="📊 V16 - كل 5 دق\n\n"
+        best,_=get_best(); txt="📊  كل 5 دق\n\n"
         for i,s in enumerate(SYMBOLS,1): txt+=f"{i}. {NAMES[s]}\n"
         if best: txt+=f"\n⭐ {best['pair']} {best['alignment']} Score {best['score']}"
         await query.edit_message_text(txt,reply_markup=main_keyboard())
@@ -280,12 +280,12 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
         best,_=get_best()
         if not best:
             logging.warning("get_best None - sending test")
-            await context.bot.send_message(chat_id=int(cid), text="🔄 AUTO TEST - البوت شغال ✅\nسيتم الإرسال بعد 5 دق")
+            await context.bot.send_message(chat_id=int(cid), text=" AUTO TEST - البوت شغال ✅\nسيتم الإرسال بعد 5 دق")
             continue
         try:
             msg=format_message(best); setup_bear_images(); img=BEAR_BUY_PATH if best["signal"]=="CALL" else BEAR_SELL_PATH
-            if os.path.exists(img): await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f"🔄 اشارة كل 5 دق - V16\n\n{msg}")
-            else: await context.bot.send_message(chat_id=int(cid),text=f"🔄 اشارة كل 5 دق\n\n{msg}")
+            if os.path.exists(img): await context.bot.send_photo(chat_id=int(cid),photo=open(img,"rb"),caption=f"{msg}")
+            else: await context.bot.send_message(chat_id=int(cid),text=f"{msg}")
         except Exception as e: logging.error(f"auto {e}")
 
 flask_app=Flask(__name__)
