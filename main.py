@@ -182,6 +182,13 @@ def run_flask():
 last_global_send = 0
 last_sent_info = ""
 
+async def clean(context):
+    try:
+        # تنظيف الذاكرة
+        pass
+    except: pass
+
+
 async def check_signals(context: ContextTypes.DEFAULT_TYPE):
     global last_global_send, last_sent_info, state
     now = time.time()
