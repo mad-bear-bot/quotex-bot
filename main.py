@@ -171,10 +171,20 @@ try:
 except: pass
 
 last_trade_end = {}
+last_global_send = 0
+last_sent_pair = ""
+
+last_global_send = 0
+last_sent_pair = ""
 
 async def check_signals(context: ContextTypes.DEFAULT_TYPE):
-    global last_trade_end
+    global last_trade_end, last_global_send, last_sent_pair
     now = time.time()
+    
+    # === تأخير 5 دقايق إجباري ===
+    if now - last_global_send < 300:
+        return
+    
     for cid, ok in list(state.get("auth",{}).items()):
         if not ok or state.get("paused",{}).get(cid): continue
         if cid in last_trade_end:
@@ -203,6 +213,8 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
             except:
                 await context.bot.send_message(chat_id=int(cid),text=f"{msg}")
             last_trade_end[cid]=now
+            last_global_send=now
+            last_sent_pair=best["pair"]
         except Exception as e:
             logging.error(f"auto error {e}")
 
