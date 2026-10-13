@@ -182,7 +182,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: await context.bot.send_message(chat_id=int(cid),text=msg)
         await context.bot.send_message(chat_id=int(cid),text="✅ انتهى",reply_markup=main_keyboard())
     elif query.data=="status":
-        best,_=get_best(); txt="📊 V16 - كل 5 دق\n\n"
+        best,_=get_best(); txt=""
         for i,s in enumerate(SYMBOLS,1): txt+=f"{i}. {NAMES[s]}\n"
         if best: txt+=f"\n⭐ {best['pair']} {best['alignment']} Score {best['score']}"
         await query.edit_message_text(txt,reply_markup=main_keyboard())
