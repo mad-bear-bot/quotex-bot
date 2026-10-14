@@ -31,7 +31,7 @@ NAMES = CLEAN
 BEAR_BUY_PATH = "/tmp/bear_buy.jpg"
 BEAR_SELL_PATH = "/tmp/bear_sell.jpg"
 
-state = {"auth":{}, "paused":{}}
+state = {"auth":{}, "paused":{}, "expiry":{}}
 
 def save_state(s): 
     try:
@@ -45,7 +45,7 @@ def load_state():
         if os.path.exists("/tmp/state.json"):
             return json.load(open("/tmp/state.json"))
     except: pass
-    return {"auth":{}, "paused":{}}
+    return {"auth":{}, "paused":{}, "expiry":{}}
 state = load_state()
 
 def compute_rsi(close, period=14):
@@ -110,16 +110,43 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text == PASSWORD:
             state["auth"][cid] = True
             save_state(state)
-            await update.message.reply_text("✅ تم الدخول", reply_markup=main_keyboard())
+            welcome = "✅ تم تسجيل الدخول\n\n🤖 SMART MARKET ANALYSIS\nإشارات تحليلية — تداول يدوي\n\n🎯 القائمة الرئيسية"
+            await update.message.reply_text(welcome, reply_markup=main_keyboard())
         else:
             await update.message.reply_text("❌ رقم خطأ، حاول مرة ثانية:")
         return
 
 def main_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 فحص الان", callback_data="check_now")],
-        [InlineKeyboardButton("📈 الحالة", callback_data="status"), InlineKeyboardButton("⏸️ ايقاف", callback_data="pause")],
-        [InlineKeyboardButton("▶️ تشغيل", callback_data="resume")]
+        [
+            InlineKeyboardButton("🔍 مسح جميع الأسواق", callback_data="scan_all"),
+            InlineKeyboardButton("📈 إشارات السوق", callback_data="signals")
+        ],
+        [
+            InlineKeyboardButton("📊 اختيار السوق", callback_data="choose_market"),
+            InlineKeyboardButton("⏰ مدة الصفقة", callback_data="expiry")
+        ],
+        [
+            InlineKeyboardButton("⚙️ الإعدادات", callback_data="settings"),
+            InlineKeyboardButton("📊 الإحصائيات", callback_data="stats")
+        ],
+        [
+            InlineKeyboardButton("⚡ بدء تحليل الأسواق", callback_data="check_now")
+        ]
+    ])
+
+def expiry_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("1 دقيقة", callback_data="exp_1"), InlineKeyboardButton("3 دقايق", callback_data="exp_3")],
+        [InlineKeyboardButton("5 دقايق", callback_data="exp_5"), InlineKeyboardButton("10 دقايق", callback_data="exp_10")],
+        [InlineKeyboardButton("🔙 رجوع", callback_data="back_main")]
+    ])
+
+def markets_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("EUR/USD 🇪🇺🇺🇸", callback_data="m_EURUSD=X"), InlineKeyboardButton("GBP/USD 🇬🇧🇺🇸", callback_data="m_GBPUSD=X")],
+        [InlineKeyboardButton("USD/JPY 🇺🇸🇯🇵", callback_data="m_USDJPY=X"), InlineKeyboardButton("EUR/JPY 🇪🇺🇯🇵", callback_data="m_EURJPY=X")],
+        [InlineKeyboardButton("🔙 رجوع", callback_data="back_main")]
     ])
 
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -129,14 +156,44 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not state.get("auth",{}).get(cid):
         await query.edit_message_text("🔐 ادخل الرقم السري أولاً /start")
         return
-    if query.data == "check_now":
+    expiry = state.get("expiry",{}).get(cid, "3 MIN") if "expiry" in state else "3 MIN"
+    if query.data in ["check_now","scan_all"]:
         best = get_best()
         if best:
             await query.edit_message_text(format_message(best), reply_markup=main_keyboard())
         else:
-            await query.edit_message_text("ما في اشارة الان", reply_markup=main_keyboard())
+            await query.edit_message_text("⏳ ما في إشارة الان", reply_markup=main_keyboard())
+    elif query.data == "signals":
+        all_s = [analyze(s) for s in SYMBOLS[:4]]
+        all_s = [x for x in all_s if x]
+        txt = "📈 **إشارات السوق الحالية:**\n\n"
+        for r in all_s:
+            arrow = "🟢⬆️" if r["signal"]=="CALL" else "🔴⬇️"
+            txt += f"{arrow} {r['pair']} {r['signal']} {r['conf']}% Score:{r['score']}\n"
+        await query.edit_message_text(txt, reply_markup=main_keyboard(), parse_mode='Markdown')
+    elif query.data == "choose_market":
+        await query.edit_message_text("📊 **اختيار السوق:**", reply_markup=markets_keyboard(), parse_mode='Markdown')
+    elif query.data.startswith("m_"):
+        sym = query.data.replace("m_","")
+        r = analyze(sym)
+        if r:
+            await query.edit_message_text(format_message(r), reply_markup=main_keyboard())
+    elif query.data == "expiry":
+        await query.edit_message_text("⏰ **مدة الصفقة:**", reply_markup=expiry_keyboard(), parse_mode='Markdown')
+    elif query.data.startswith("exp_"):
+        exp_map = {"exp_1":"1 MIN","exp_3":"3 MIN","exp_5":"5 MIN","exp_10":"10 MIN"}
+        chosen = exp_map.get(query.data, "3 MIN")
+        state.setdefault("expiry",{})[cid]=chosen
+        save_state(state)
+        await query.edit_message_text(f"✅ المدة: **{chosen}**", reply_markup=main_keyboard(), parse_mode='Markdown')
+    elif query.data == "stats":
+        await query.edit_message_text("📊 **الإحصائيات:**\n\n✅ Score 88+\n⏱️ كل 40 ثانية\n📈 6 أزواج\n🟢 شغال", reply_markup=main_keyboard(), parse_mode='Markdown')
+    elif query.data == "settings":
+        await query.edit_message_text(f"⚙️ **الإعدادات:**\n\n⏰ المدة: {expiry}\n🔔 التنبيهات: مفعلة", reply_markup=main_keyboard(), parse_mode='Markdown')
+    elif query.data == "back_main":
+        await query.edit_message_text("🎯 **القائمة الرئيسية**", reply_markup=main_keyboard(), parse_mode='Markdown')
     elif query.data == "status":
-        await query.edit_message_text("📊 V40 شغال - كل 5 دق\nممتاز فقط 88+", reply_markup=main_keyboard())
+        await query.edit_message_text("📊 شغال - كل 5 دق\nممتاز فقط 88+", reply_markup=main_keyboard())
     elif query.data == "pause":
         state["paused"][cid] = True
         save_state(state)
