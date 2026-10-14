@@ -474,7 +474,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             state["auth"][cid]=True
             save_state(state)
-            welcome="🤖 تحليل Pocket Option\n📡 تحليل قوي ما يخسر\n\n🎯 القائمة الرئيسية"
+            welcome="✅  تم فتح البوت Welcome \n🤖  تحليل Pocket Option\n📡  تحليل ⚡️ Strong \n🎯 أختر من القائمة الرئيسية ⬇️"
             await context.bot.send_message(chat_id=int(cid), text=welcome, reply_markup=main_keyboard())
         else:
             # احذف المحاولة الخاطئة أيضا
@@ -536,7 +536,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("📊 **الإحصائيات - تحليل قوي:**\n\n📡 10 مؤشرات + M15/H1 قوة\n📊 7 أسواق\n✅ 88+ فقط - تجنب الخسارة\n⏱️ مدة ذكية متغيرة 1M-5M\n🗑️ حذف تلقائي بعد انتهاء المدة\n🖼️ BUY أخضر SELL أحمر", reply_markup=main_keyboard(), parse_mode='Markdown')
     elif query.data=="settings":
         auto="شغال 🟢" if state.get("auto",{}).get(cid) else "متوقف 🔴"
-        await query.edit_message_text(f"⚙️ **الإعدادات:**\n\n🤖 تلقائي: {auto}\n🔐 سري: 7154 (يختفي)\n🗑️ حذف تلقائي: مفعل\n📊 تحليل قوي: مفعل", reply_markup=main_keyboard(), parse_mode='Markdown')
+        await query.edit_message_text(f"⚙️ **الإعدادات:**\n\n🤖 تلقائي: {auto}\n🔐 البوت محمي \n🗑️ تلقائي\n📊 تحليل من مصادر موثوقه : مفعل", reply_markup=main_keyboard(), parse_mode='Markdown')
     elif query.data=="back_main":
         await query.edit_message_text("🎯 **القائمة الرئيسية**", reply_markup=main_keyboard(), parse_mode='Markdown')
 
