@@ -257,7 +257,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text == PASSWORD:
             state["auth"][cid] = True
             save_state(state)
-            welcome = "✅ تم الدخول\n\n🤖 تحليل Pocket Option\n📡 8 أسواق حقيقية\n🥇 مع الذهب\n\n🎯 القائمة الرئيسية"
+            welcome = "🤖 تحليل Pocket Option\n📡 8 MARKETING REAL\n\n🎯 القائمة الرائيسية"
             await update.message.reply_text(welcome, reply_markup=main_keyboard())
         else:
             await update.message.reply_text("❌ رقم خطأ:")
