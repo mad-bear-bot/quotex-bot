@@ -14,6 +14,36 @@ def run_flask():
 threading.Thread(target=run_flask, daemon=True).start()
 time.sleep(2)
 
+# === يشتغل البوت حتى لو Render شغل Flask بـ gunicorn ===
+def start_bot_polling():
+    import threading
+    def run_bot():
+        time.sleep(3)
+        try:
+            main()
+        except Exception as e:
+            logging.error(f"Bot polling crashed: {e}")
+    t = threading.Thread(target=run_bot, daemon=True)
+    t.start()
+
+# إذا اشتغل بـ gunicorn (WSGI) - شغل البوت في الخلفية
+if os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_NAME") or "gunicorn" in str(os.environ.get("SERVER_SOFTWARE","")):
+    start_bot_polling()
+else:
+    # شغل Flask في الخلفية لما نشغل python main.py
+    pass
+
+# للـ gunicorn - لما يستورد الملف
+try:
+    if "gunicorn" in __import__("sys").modules or "wsgi" in __import__("sys").argv[0].lower() or True:
+        # دائما شغل البوت في الخلفية عند الاستيراد
+        if not os.environ.get("BOT_STARTED"):
+            os.environ["BOT_STARTED"] = "1"
+            start_bot_polling()
+except: 
+    pass
+
+
 SYMBOLS = ["EURUSD=X","GBPUSD=X","USDJPY=X","EURJPY=X","GBPJPY=X","AUDUSD=X"]
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8631107180:AAEvTM8sVVHZTerraQsGFW1T44oI1PoQ46YU")
 try:
@@ -274,6 +304,14 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"check_signals plan error {e}")
 
 def main():
+    # اقتل أي نسخة ثانية
+    for _ in range(3):
+        try:
+            requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=5)
+            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=5)
+            time.sleep(1)
+        except: pass
+
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(buttons))
@@ -281,7 +319,13 @@ def main():
     app.job_queue.run_repeating(check_signals, interval=40, first=25)
     app.job_queue.run_repeating(clean, interval=3600, first=30)
     logging.info("V35 PLAN - EXCELLENT ONLY - 5MIN - NO V16 HEADER")
-    app.run_polling(drop_pending_updates=True, close_loop=False)
+    try:
+        app.run_polling(drop_pending_updates=True, close_loop=False, allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        if "Conflict" in str(e):
+            logging.error("CONFLICT - another instance running, waiting 60s")
+            time.sleep(60)
+        raise
 
 if __name__ == "__main__":
     main()
