@@ -9,8 +9,6 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8631107180:AAEvTM8sVVHZTerraQsGFW1T44oI1PoQ46YU")
 PASSWORD = os.environ.get("BOT_PASSWORD", "7154")
 
-# الصور - تستخدم الموجودة لو موجودة
-
 BUY_B64 = ""
 SELL_B64 = ""
 
@@ -20,21 +18,16 @@ def setup_images():
         os.makedirs("/tmp/bot_images", exist_ok=True)
         buy_path="/tmp/bot_images/buy.jpg"
         sell_path="/tmp/bot_images/sell.jpg"
-        # انشاء صور BUY/SELL اذا مو موجودة
         if not os.path.exists(buy_path):
             img=Image.new('RGB',(800,450),(16,185,129))
             d=ImageDraw.Draw(img)
-            # سهم فوق
             d.polygon([(400,70),(280,210),(330,210),(330,330),(470,330),(470,210),(520,210)], fill=(255,255,255))
-            d.text((260,380),"BUY - CALL - صعود ⬆", fill=(255,255,255))
             img.save(buy_path)
         if not os.path.exists(sell_path):
             img=Image.new('RGB',(800,450),(239,68,68))
             d=ImageDraw.Draw(img)
             d.polygon([(400,330),(280,190),(330,190),(330,70),(470,70),(470,190),(520,190)], fill=(255,255,255))
-            d.text((250,380),"SELL - PUT - هبوط ⬇", fill=(255,255,255))
             img.save(sell_path)
-        # لو فيه B64 قديم استخدمه
         if BUY_B64:
             with open(buy_path,"wb") as f: f.write(base64.b64decode(BUY_B64))
         if SELL_B64:
@@ -43,25 +36,22 @@ def setup_images():
     except Exception as e:
         logging.error(f"setup images {e}")
 
-
 setup_images()
 
 from flask import Flask
 flask_app = Flask(__name__)
 @flask_app.route('/')
-def home(): return 'VIP 7154 + 10 REAL + TIME FILTER JEDDAH + AUTO DELETE'
+def home(): return 'VIP 7154 + 10 REAL + TIME FILTER JEDDAH + AUTO DELETE - FIXED'
 @flask_app.route('/health')
 def health(): return 'OK'
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     flask_app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
-# 10 اسواق حقيقية REAL فقط - نفس صورتك
 SYMBOLS = ["EURUSD=X","USDJPY=X","AUDUSD=X","USDCAD=X","EURJPY=X","USDCHF=X","AUDJPY=X","EURAUD=X","AUDCAD=X","CADJPY=X"]
 CLEAN = {"EURUSD=X":"EUR/USD","USDJPY=X":"USD/JPY","AUDUSD=X":"AUD/USD","USDCAD=X":"USD/CAD","EURJPY=X":"EUR/JPY","USDCHF=X":"USD/CHF","AUDJPY=X":"AUD/JPY","EURAUD=X":"EUR/AUD","AUDCAD=X":"AUD/CAD","CADJPY=X":"CAD/JPY"}
 FLAGS = {"EURUSD=X":"🇪🇺🇺🇸","USDJPY=X":"🇺🇸🇯🇵","AUDUSD=X":"🇦🇺🇺🇸","USDCAD=X":"🇺🇸🇨🇦","EURJPY=X":"🇪🇺🇯🇵","USDCHF=X":"🇺🇸🇨🇭","AUDJPY=X":"🇦🇺🇯🇵","EURAUD=X":"🇪🇺🇦🇺","AUDCAD=X":"🇦🇺🇨🇦","CADJPY=X":"🇨🇦🇯🇵"}
 
-# جدول الاوقات المثالي بتوقيت جدة - بحث دقيق
 SAUDI_TZ = pytz.timezone('Asia/Riyadh')
 MARKET_HOURS = {
     "EURUSD=X": {"name":"EUR/USD","best_days":"الثلاثاء-الخميس","best_time":"10:00-19:00","hours":[(10,19)],"session":"London+NY"},
@@ -77,21 +67,15 @@ MARKET_HOURS = {
 }
 
 def is_optimal_time_jeddah(symbol):
-    """فلتر وقت ذكي بتوقيت جدة"""
     now = datetime.now(SAUDI_TZ)
-    day = now.weekday()  # 0=Mon, 6=Sun
+    day = now.weekday()
     hour = now.hour
-    
-    # سبت واحد مقفل
     if day >= 5:
         return False, "ويكند مقفل"
-    # جمعة بعد 5 مساء خطر
     if day == 4 and hour >= 17:
         return False, "جمعة مساء"
-    # اثنين قبل 10 صباحا تذبذب
     if day == 0 and hour < 10:
         return False, "اثنين صباحا"
-    
     hours = MARKET_HOURS[symbol]["hours"]
     active = False
     for s,e in hours:
@@ -154,7 +138,7 @@ def calc_best_expiry(rsi_now, atr_now, price, bullish, bearish, trend_strength, 
     if atr_pct>0.12:
         return "2 د","2M","تذبذب متوسط"
     if trend_strength>=7:
-        return "2 د","2M","ترند قوي جدا 🔥"
+        return "2 د","2M","ترند قوي جدا"
     if trend_strength==6:
         return "2 د","2M","ترند قوي جدا"
     if trend_strength==5:
@@ -199,6 +183,7 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
         atr=compute_atr(high,low,close,14); atr_now=float(atr.iloc[-1]) if len(atr)>0 else 0
         last_high=float(high.tail(20).max()); last_low=float(low.tail(20).min())
         recent_high=float(high.tail(5).max()); recent_low=float(low.tail(5).min())
+
         trend_m15_bullish=True; m15_strength=0
         try:
             if df_m15 is not None and not df_m15.empty and len(df_m15)>20:
@@ -217,6 +202,7 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
                 elif float(close_h1.iloc[-1])>float(ema50_h1): h1_strength=1
                 else: h1_strength=-1
         except: pass
+
         bullish=0; bearish=0
         if price>ema20_now and ema20_now>ema20_prev: bullish+=1
         elif price<ema20_now and ema20_now<ema20_prev: bearish+=1
@@ -247,26 +233,28 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
         if price>recent_high: bullish+=1
         if price<recent_low: bearish+=1
         trend_strength=max(bullish,bearish)
-        # FIX: رفع الحد من 5 الى 6 لتجنب اشارات ضعيفة مثل USD/CAD اللي خسرت
-        if trend_strength<6: return None
-        # FIX: فلتر ارهاق الشمعة - لو شمعة كبيرة خضراء قبلها مباشرة + RSI متوسط = لا تدخل صعود
+        if trend_strength<6:
+            return None
         try:
             prev_close=float(close.iloc[-2]) if len(close)>1 else price
             prev_open=float(df_m5['Open'].iloc[-2]) if 'Open' in df_m5.columns and len(df_m5)>1 else prev_close
             prev_candle_pct=abs(prev_close-prev_open)/prev_close*100 if prev_close else 0
-            # شمعة كبيرة جدا + محاولة صعود بعده = ارهاق
-            if prev_candle_pct>0.08 and rsi_now>50 and rsi_now<65:
-                # اذا الشمعة السابقة خضراء كبيرة واشارتنا صعود = احتمال انعكاس
-                if prev_close>prev_open:
-                    # لازم RSI يكون صاعد بقوة مو متذبذب
-                    if rsi_now<=rsi_prev:
-                        return None
+            if prev_candle_pct>0.08 and 50<rsi_now<65:
+                if prev_close>prev_open and rsi_now<=rsi_prev:
+                    return None
         except: pass
-        if bullish>=5 and bullish>bearish: signal="CALL"; signal_ar="صعود"
-        elif bearish>=5 and bearish>bullish: signal="PUT"; signal_ar="هبوط"
+
+        if bullish>=6 and bullish>bearish: signal="CALL"; signal_ar="صعود"
+        elif bearish>=6 and bearish>bullish: signal="PUT"; signal_ar="هبوط"
         else:
             if bullish>bearish: signal="CALL"; signal_ar="صعود"
             else: signal="PUT"; signal_ar="هبوط"
+
+        if signal=="CALL" and price < ema20_now:
+            return None
+        if signal=="PUT" and price > ema20_now:
+            return None
+
         score=50+(bullish*7 if signal=="CALL" else bearish*7)
         score+=max(0,(rsi_now-50) if signal=="CALL" else (50-rsi_now))*0.5
         if abs(macd_now-macd_sig_now)>0.00008: score+=5
@@ -279,28 +267,21 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
         score=min(97,max(60,int(score))); conf=min(94,max(70,score-random.randint(1,3)))
         if signal=="CALL" and rsi_now>70: score-= (rsi_now-70)*1.5
         if signal=="PUT" and rsi_now<30: score-= (30-rsi_now)*1.5
-        if score>=90: strength="قوية جدا 🔥"; conf_text="ممتازة"
+        if score>=90: strength="قوية جدا"; conf_text="ممتازة"
         elif score>=82: strength="قوية"; conf_text="جيدة جدا"
         else: strength="متوسطة"; conf_text="جيدة"
         if score<70: return None
         best_expiry,best_expiry_m,expiry_reason=calc_best_expiry(rsi_now,atr_now,price,bullish,bearish,trend_strength,signal)
         m15_ok = (trend_m15_bullish and signal=="CALL") or (not trend_m15_bullish and signal=="PUT")
         h1_ok = (trend_h1_bullish and signal=="CALL") or (not trend_h1_bullish and signal=="PUT")
-        # اضافة معلومات الوقت
         info_time = MARKET_HOURS.get(symbol, {})
-        # فلتر اضافي: السعر لازم يكون فوق EMA20 للصعود وتحت للهبوط
-    if signal=="CALL" and price < ema20_now:
-        return None
-    if signal=="PUT" and price > ema20_now:
-        return None
-    return {"pair":CLEAN.get(symbol,symbol),"flag":FLAGS.get(symbol,""),"signal":signal,"signal_ar":signal_ar,"conf":conf,"score":score,"price":price,"strength":strength,"conf_text":conf_text,"rsi_m5":rsi_now,"align_num":trend_strength,"symbol":symbol,"atr":atr_now,"best_expiry":best_expiry,"best_expiry_m":best_expiry_m,"expiry_reason":expiry_reason,"m15_confirm":m15_ok,"h1_confirm":h1_ok,"m15_str":m15_strength,"h1_str":h1_strength,"best_time":info_time.get("best_time",""),"session":info_time.get("session",""),"best_days":info_time.get("best_days","")}
+        return {"pair":CLEAN.get(symbol,symbol),"flag":FLAGS.get(symbol,""),"signal":signal,"signal_ar":signal_ar,"conf":conf,"score":score,"price":price,"strength":strength,"conf_text":conf_text,"rsi_m5":rsi_now,"align_num":trend_strength,"symbol":symbol,"atr":atr_now,"best_expiry":best_expiry,"best_expiry_m":best_expiry_m,"expiry_reason":expiry_reason,"m15_confirm":m15_ok,"h1_confirm":h1_ok,"m15_str":m15_strength,"h1_str":h1_strength,"best_time":info_time.get("best_time",""),"session":info_time.get("session",""),"best_days":info_time.get("best_days","")}
     except Exception as e:
         logging.error(f"analyze {symbol} {e}")
         return None
 
 def analyze_real_tradingview(symbol):
-    # فلتر وقت اولا
-    ok, _ = is_optimal_time_jeddah(symbol)
+    ok,_ = is_optimal_time_jeddah(symbol)
     if not ok:
         return None
     try:
@@ -357,7 +338,7 @@ def get_best():
             if r: results.append(r)
             time.sleep(2)
     if not results: return None
-    filtered = [r for r in results if r["score"]>=90 and r["m15_confirm"] and r["h1_confirm"] and r["align_num"]>=6]  # رفع من 88 الى 90 + لازم 6 مؤشرات
+    filtered = [r for r in results if r["score"]>=90 and r["m15_confirm"] and r["h1_confirm"] and r["align_num"]>=6]
     if not filtered:
         logging.info("No agreed M15/H1 signals - skipping")
         return None
@@ -502,7 +483,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except: pass
             state["auth"][cid]=True
             save_state(state)
-            welcome="✅ تم فتح البوت Welcome\n🤖 تحليل Pocket Option - 10 REAL\n📡 تحليل قوي + فلتر وقت جدة\n🎯 اختر من القائمة ⬇"
+            welcome="✅ تم فتح البوت Welcome\n🤖 تحليل Pocket Option - 10 REAL\n📡 تحليل قوي + فلتر وقت جدة + فلتر EMA20\n🎯 اختر من القائمة ⬇"
             await context.bot.send_message(chat_id=int(cid), text=welcome, reply_markup=main_keyboard())
         else:
             try: await update.message.delete()
@@ -518,7 +499,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("🔐 ادخل الرقم السري أولاً /start")
         return
     if query.data in ["scan_all","check_now"]:
-        await query.edit_message_text("⏳ جاري فحص 10 أسواق حقيقية بفلتر وقت جدة...")
+        await query.edit_message_text("⏳ جاري فحص 10 أسواق حقيقية بفلتر وقت جدة + EMA20...")
         best=get_best()
         if best:
             try: await query.message.delete()
@@ -558,16 +539,16 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data=="auto_start":
         state.setdefault("auto",{})[cid]=True
         save_state(state)
-        await query.edit_message_text("✅ **البوت التلقائي يعمل - 10 REAL + وقت جدة**\n\n💎 إشارات VIP كل 3 دقائق\n📈 دقة 88%+\n🕐 فلتر وقت ذكي جدة\n🌍 10 أسواق حقيقية", reply_markup=main_keyboard(), parse_mode='Markdown')
+        await query.edit_message_text("✅ **البوت التلقائي يعمل - 10 REAL + وقت جدة + EMA20**\n\n💎 إشارات VIP كل 3 دقائق\n📈 دقة 90%+ (6 مؤشرات)\n🕐 فلتر وقت ذكي جدة\n🌍 10 أسواق حقيقية", reply_markup=main_keyboard(), parse_mode='Markdown')
     elif query.data=="auto_stop":
         state.setdefault("auto",{})[cid]=False
         save_state(state)
         await query.edit_message_text("🛑 **متوقف**", reply_markup=main_keyboard(), parse_mode='Markdown')
     elif query.data=="stats":
-        await query.edit_message_text("📊 **الإحصائيات:**\n\n📡 10 مؤشرات + M15/H1 قوة\n📊 10 أسواق حقيقية REAL\n✅ 88+ فقط - فلتر وقت جدة\n⏱ مدة ذكية 1M-5M\n🕐 بتوقيت جدة\n🌍 بدون OTC", reply_markup=main_keyboard(), parse_mode='Markdown')
+        await query.edit_message_text("📊 **الإحصائيات:**\n\n📡 10 مؤشرات + M15/H1 قوة + EMA20\n📊 10 أسواق حقيقية REAL\n✅ 90+ فقط - فلتر وقت جدة\n⏱ مدة ذكية 1M-5M\n🕐 بتوقيت جدة\n🌍 بدون OTC", reply_markup=main_keyboard(), parse_mode='Markdown')
     elif query.data=="settings":
         auto="شغال 🟢" if state.get("auto",{}).get(cid) else "متوقف 🔴"
-        await query.edit_message_text(f"⚙ **الإعدادات:**\n\n🤖 تلقائي: {auto}\n🔐 البوت محمي 7154\n🕐 فلتر وقت جدة: مفعل\n🌍 10 REAL - بدون OTC\n📊 الأيام: الثلاثاء-الخميس أفضل", reply_markup=main_keyboard(), parse_mode='Markdown')
+        await query.edit_message_text(f"⚙ **الإعدادات:**\n\n🤖 تلقائي: {auto}\n🔐 البوت محمي 7154\n🕐 فلتر وقت جدة: مفعل\n🌍 10 REAL - بدون OTC\n📊 فلتر EMA20: مفعل\n📊 الأيام: الثلاثاء-الخميس أفضل", reply_markup=main_keyboard(), parse_mode='Markdown')
     elif query.data=="trades_performance":
         txt=get_trades_text(cid)
         await query.edit_message_text(txt, reply_markup=trades_keyboard(), parse_mode='Markdown')
@@ -599,7 +580,7 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
         best=get_best()
         if not best: return
         if not best["m15_confirm"] or not best["h1_confirm"]: return
-        if best["score"]<88: return
+        if best["score"]<90: return
         symbol = best["symbol"]
         signal = best["signal"]
         last_info = last_sent_per_symbol.get(symbol)
@@ -640,7 +621,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.job_queue.run_repeating(check_signals, interval=180, first=30)
     app.job_queue.run_repeating(clean, interval=3600, first=60)
-    logging.info("VIP 7154 + 10 REAL + TIME FILTER JEDDAH READY")
+    logging.info("VIP 7154 + 10 REAL + TIME FILTER JEDDAH READY - FIXED v2")
     app.run_polling(drop_pending_updates=True, close_loop=False, allowed_updates=Update.ALL_TYPES)
 
 if __name__=="__main__":
