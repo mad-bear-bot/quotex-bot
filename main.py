@@ -212,11 +212,26 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
         elif ema20_now>ema50_now: bullish+=1
         else: bearish+=1
         
-        # 3: RSI مع اتجاه
+        # 3: RSI مع اتجاه + فلتر تشبع قوي ما يخسر
+        # منع دخول في تشبع قوي جدا
+        if rsi_now>80:  # تشبع شراء خطير - لا تدخل صعود
+            if bullish>=bearish:  # كان يبغى صعود
+                logging.info(f"Skipping overbought {symbol} RSI {rsi_now:.1f}")
+                return None
+        if rsi_now<20:  # تشبع بيع خطير - لا تدخل هبوط
+            if bearish>=bullish:  # كان يبغى هبوط
+                logging.info(f"Skipping oversold {symbol} RSI {rsi_now:.1f}")
+                return None
+        
         if 40<rsi_now<70 and rsi_now>rsi_prev and rsi_prev>rsi_prev2: bullish+=1
         elif 30<rsi_now<60 and rsi_now<rsi_prev and rsi_prev<rsi_prev2: bearish+=1
-        elif rsi_now>72: bearish+=1
-        elif rsi_now<28: bullish+=1
+        elif rsi_now>72: bearish+=2  # إشارة انعكاس قوية - نقطتين
+        elif rsi_now<28: bullish+=2  # إشارة انعكاس قوية - نقطتين
+        # تشبع متوسط 70-80 و 20-30 = خصم قوة
+        if 70<=rsi_now<=80 and bullish>bearish:
+            bullish-=1  # لا تدخل صعود في تشبع متوسط
+        if 20<=rsi_now<=30 and bearish>bullish:
+            bearish-=1  # لا تدخل هبوط في تشبع متوسط
         
         # 4: MACD
         if macd_now>macd_sig_now and macd_now>macd_prev: bullish+=1
@@ -275,10 +290,20 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
             score-=10
         
         score=min(97,max(60,int(score))); conf=min(94,max(70,score-random.randint(1,3)))
+
+        # خصم إضافي لو RSI في تشبع حتى لو سمحنا بالإشارة
+        if signal=="CALL" and rsi_now>70:
+            score-= (rsi_now-70)*1.5  # كل نقطة فوق 70 تخصم 1.5
+        if signal=="PUT" and rsi_now<30:
+            score-= (30-rsi_now)*1.5  # كل نقطة تحت 30 تخصم 1.5
         
         if score>=90: strength="قوية جدا 🔥"; conf_text="ممتازة"
         elif score>=82: strength="قوية"; conf_text="جيدة جدا"
         else: strength="متوسطة"; conf_text="جيدة"
+        
+        # لو Score نزل تحت 88 بسبب التشبع - لا ترسل
+        if score<70:
+            return None
         
         best_expiry,best_expiry_m,expiry_reason=calc_best_expiry(rsi_now,atr_now,price,bullish,bearish,trend_strength,signal)
         
