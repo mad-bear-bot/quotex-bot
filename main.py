@@ -120,10 +120,10 @@ def calc_best_expiry(rsi_now, atr_now, price, bullish, bearish, trend_strength, 
     
     return "5 د","5M","تجميع"
 
-def fetch_all_data_batch():
+def fetch_all_data_batch(force_fresh=False):
     global _price_cache
     now = time.time()
-    if _price_cache["data"] is not None and (now - _price_cache["time"]) < 90:
+    if not force_fresh and _price_cache["data"] is not None and (now - _price_cache["time"]) < 30:
         return _price_cache["data"]
     try:
         logging.info("Fetching batch data")
@@ -282,7 +282,11 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
         
         best_expiry,best_expiry_m,expiry_reason=calc_best_expiry(rsi_now,atr_now,price,bullish,bearish,trend_strength,signal)
         
-        return {"pair":CLEAN.get(symbol,symbol),"flag":FLAGS.get(symbol,""),"signal":signal,"signal_ar":signal_ar,"conf":conf,"score":score,"price":price,"strength":strength,"conf_text":conf_text,"rsi_m5":rsi_now,"align_num":trend_strength,"symbol":symbol,"atr":atr_now,"best_expiry":best_expiry,"best_expiry_m":best_expiry_m,"expiry_reason":expiry_reason,"m15_confirm":trend_m15_bullish,"h1_confirm":trend_h1_bullish,"m15_str":m15_strength,"h1_str":h1_strength}
+        # تصحيح عرض M15 و H1 - ✅ إذا متوافق مع الإشارة
+        m15_ok = (trend_m15_bullish and signal=="CALL") or (not trend_m15_bullish and signal=="PUT")
+        h1_ok = (trend_h1_bullish and signal=="CALL") or (not trend_h1_bullish and signal=="PUT")
+        
+        return {"pair":CLEAN.get(symbol,symbol),"flag":FLAGS.get(symbol,""),"signal":signal,"signal_ar":signal_ar,"conf":conf,"score":score,"price":price,"strength":strength,"conf_text":conf_text,"rsi_m5":rsi_now,"align_num":trend_strength,"symbol":symbol,"atr":atr_now,"best_expiry":best_expiry,"best_expiry_m":best_expiry_m,"expiry_reason":expiry_reason,"m15_confirm":m15_ok,"h1_confirm":h1_ok,"m15_str":m15_strength,"h1_str":h1_strength}
     except Exception as e:
         logging.error(f"analyze {symbol} {e}")
         return None
@@ -310,7 +314,7 @@ def analyze_real_tradingview(symbol):
         return None
 
 def get_best():
-    batch_data = fetch_all_data_batch()
+    batch_data = fetch_all_data_batch(force_fresh=True)
     results=[]
     if batch_data is not None and not batch_data.empty:
         try:
@@ -342,15 +346,17 @@ def get_best():
             time.sleep(2)
     
     if not results: return None
-    # فلتر إضافي: لا تخسر - لازم M15 و H1 متوافقين للتلقائي
-    filtered = [r for r in results if r["score"]>=88]
+    # فلتر مثل أول: لازم M15 و H1 متفقين ✅✅
+    filtered = [r for r in results if r["score"]>=88 and r["m15_confirm"] and r["h1_confirm"]]
     if not filtered:
-        filtered = results
+        # لو ما فيه متفق، لا ترسل شي - هذا مثل أول
+        logging.info("No agreed M15/H1 signals - skipping")
+        return None
     filtered.sort(key=lambda x:(x["score"],x["align_num"]), reverse=True)
     return filtered[0] if filtered else None
 
 def get_all_signals():
-    batch_data = fetch_all_data_batch()
+    batch_data = fetch_all_data_batch(force_fresh=True)
     results=[]
     if batch_data is not None and not batch_data.empty:
         for sym in SYMBOLS:
@@ -611,12 +617,12 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
     try:
         best=get_best()
         if not best: return
-        # فلتر قوي ما يخسر - لازم 88+ و M15 و H1 متوافقين
+        # مثل أول: لازم M15 و H1 متفقين ✅✅
+        if not best["m15_confirm"] or not best["h1_confirm"]:
+            logging.info(f"Skipping - M15/H1 not agreed {best['pair']} M15:{best['m15_confirm']} H1:{best['h1_confirm']}")
+            return
+        # فلتر قوي ما يخسر - لازم 88+
         if best["score"]<88: return
-        if best["m15_str"]<=0 or best["h1_str"]<=0:
-            if best["score"]<92:  # لو M15 أو H1 ضعيف لازم سكور عالي جدا
-                logging.info(f"Skipping weak M15/H1 signal {best['pair']}")
-                return
         if last_sent_info==best["pair"] and (now-last_global_send)<300: return
         sent=0
         for cid, ok in list(state.get("auth",{}).items()):
