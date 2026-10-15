@@ -41,7 +41,7 @@ SYMBOLS = ["EURUSD=X","GBPUSD=X","USDJPY=X","AUDUSD=X","USDCAD=X","EURJPY=X","GB
 CLEAN = {"EURUSD=X":"EUR/USD","GBPUSD=X":"GBP/USD","USDJPY=X":"USD/JPY","AUDUSD=X":"AUD/USD","USDCAD=X":"USD/CAD","EURJPY=X":"EUR/JPY","GBPJPY=X":"GBP/JPY"}
 FLAGS = {"EURUSD=X":"🇪🇺🇺🇸","GBPUSD=X":"🇬🇧🇺🇸","USDJPY=X":"🇺🇸🇯🇵","AUDUSD=X":"🇦🇺🇺🇸","USDCAD=X":"🇺🇸🇨🇦","EURJPY=X":"🇪🇺🇯🇵","GBPJPY=X":"🇬🇧🇯🇵"}
 
-state = {"auth":{},"paused":{},"expiry":{},"auto":{}}
+state = {"auth":{},"paused":{},"expiry":{},"auto":{},"trades":{}}
 def save_state(s):
     try:
         import json; json.dump(s, open("/tmp/state.json","w"))
@@ -49,10 +49,20 @@ def save_state(s):
 def load_state():
     try:
         import json
-        if os.path.exists("/tmp/state.json"): return json.load(open("/tmp/state.json"))
+        if os.path.exists("/tmp/state.json"): 
+            d=json.load(open("/tmp/state.json"))
+            if "trades" not in d: d["trades"]={}
+            return d
     except: pass
-    return {"auth":{},"paused":{},"expiry":{},"auto":{}}
+    return {"auth":{},"paused":{},"expiry":{},"auto":{},"trades":{}}
 state = load_state()
+
+# تنظيف الصفقات القديمة بعد 12 ساعة
+def clean_old_trades():
+    now=time.time()
+    for cid in list(state.get("trades",{}).keys()):
+        state["trades"][cid]=[t for t in state["trades"][cid] if now - t.get("ts",0) < 43200]  # 12 ساعة = 43200 ثانية
+    save_state(state)
 
 _price_cache = {"data": None, "time": 0}
 
@@ -383,9 +393,44 @@ def main_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔍 فحص كل الأسواق", callback_data="scan_all"), InlineKeyboardButton("📈 كل الإشارات", callback_data="signals")],
         [InlineKeyboardButton("📊 اختيار سوق", callback_data="choose_market")],
+        [InlineKeyboardButton("📈 أداء الصفقات", callback_data="trades_performance")],
         [InlineKeyboardButton("⚡ بدء البوت التلقائي", callback_data="auto_start"), InlineKeyboardButton("🛑 إيقاف التلقائي", callback_data="auto_stop")],
         [InlineKeyboardButton("⚙️ الإعدادات", callback_data="settings"), InlineKeyboardButton("📊 الإحصائيات", callback_data="stats")]
     ])
+
+def trades_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Profit", callback_data="trade_profit"), InlineKeyboardButton("❌ Loss", callback_data="trade_loss")],
+        [InlineKeyboardButton("🔙 رجوع", callback_data="back_main"), InlineKeyboardButton("🗑️ مسح الكل", callback_data="trades_clear")]
+    ])
+
+def get_trades_text(cid):
+    clean_old_trades()
+    trades=state.get("trades",{}).get(cid,[])
+    if not trades:
+        return "📈 **أداء الصفقات - 12 ساعة**\n\n⚪ لا يوجد صفقات مسجلة\n\nاضغط Profit إذا ربحت أو Loss إذا خسرت\n⏰ تنحذف تلقائيا بعد 12 ساعة"
+    
+    profit_count=sum(1 for t in trades if t["type"]=="profit")
+    loss_count=sum(1 for t in trades if t["type"]=="loss")
+    total=len(trades)
+    win_rate=int(profit_count/total*100) if total>0 else 0
+    
+    txt=f"📈 **أداء الصفقات - آخر 12 ساعة**\n\n"
+    txt+=f"📊 الإجمالي: {total} | ✅ {profit_count} | ❌ {loss_count} | 🎯 {win_rate}%\n"
+    txt+=f"━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    # آخر 15 صفقة
+    for t in trades[-15:]:
+        if t["type"]=="profit":
+            txt+=f"Profit ✅\n"
+        else:
+            txt+=f"Loss ❌\n"
+    
+    if len(trades)>15:
+        txt+=f"\n... و {len(trades)-15} صفقة سابقة"
+    
+    txt+=f"\n\n⏰ تنحذف تلقائيا بعد 12 ساعة"
+    return txt
 
 def markets_keyboard():
     return InlineKeyboardMarkup([
@@ -537,6 +582,23 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data=="settings":
         auto="شغال 🟢" if state.get("auto",{}).get(cid) else "متوقف 🔴"
         await query.edit_message_text(f"⚙️ **الإعدادات:**\n\n🤖 تلقائي: {auto}\n🔐 البوت محمي \n🗑️ تلقائي\n📊 تحليل من مصادر موثوقه : مفعل", reply_markup=main_keyboard(), parse_mode='Markdown')
+    elif query.data=="trades_performance":
+        txt=get_trades_text(cid)
+        await query.edit_message_text(txt, reply_markup=trades_keyboard(), parse_mode='Markdown')
+    elif query.data=="trade_profit":
+        state.setdefault("trades",{}).setdefault(cid,[]).append({"type":"profit","ts":time.time()})
+        save_state(state)
+        txt=get_trades_text(cid)
+        await query.edit_message_text(txt, reply_markup=trades_keyboard(), parse_mode='Markdown')
+    elif query.data=="trade_loss":
+        state.setdefault("trades",{}).setdefault(cid,[]).append({"type":"loss","ts":time.time()})
+        save_state(state)
+        txt=get_trades_text(cid)
+        await query.edit_message_text(txt, reply_markup=trades_keyboard(), parse_mode='Markdown')
+    elif query.data=="trades_clear":
+        state.setdefault("trades",{})[cid]=[]
+        save_state(state)
+        await query.edit_message_text("🗑️ تم مسح كل الصفقات", reply_markup=trades_keyboard(), parse_mode='Markdown')
     elif query.data=="back_main":
         await query.edit_message_text("🎯 **القائمة الرئيسية**", reply_markup=main_keyboard(), parse_mode='Markdown')
 
@@ -571,7 +633,11 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logging.error(f"check {e}")
 
-async def clean(context: ContextTypes.DEFAULT_TYPE): pass
+async def clean(context: ContextTypes.DEFAULT_TYPE): 
+    try:
+        clean_old_trades()
+        logging.info("Cleaned old trades (12h)")
+    except: pass
 
 def main():
     try:
