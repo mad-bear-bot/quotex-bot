@@ -6,4 +6,3 @@ pandas
 numpy
 pytz
 Pillow==10.4.0
-→ 7 مكتبات ✅
