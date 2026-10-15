@@ -10,22 +10,39 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "8631107180:AAEvTM8sVVHZTerraQsGFW1T44oI
 PASSWORD = os.environ.get("BOT_PASSWORD", "7154")
 
 # الصور - تستخدم الموجودة لو موجودة
+
 BUY_B64 = ""
 SELL_B64 = ""
 
 def setup_images():
     try:
+        from PIL import Image, ImageDraw
         os.makedirs("/tmp/bot_images", exist_ok=True)
-        # لا تحذف اذا الملفات موجودة من البوت القديم
+        buy_path="/tmp/bot_images/buy.jpg"
+        sell_path="/tmp/bot_images/sell.jpg"
+        # انشاء صور BUY/SELL اذا مو موجودة
+        if not os.path.exists(buy_path):
+            img=Image.new('RGB',(800,450),(16,185,129))
+            d=ImageDraw.Draw(img)
+            # سهم فوق
+            d.polygon([(400,70),(280,210),(330,210),(330,330),(470,330),(470,210),(520,210)], fill=(255,255,255))
+            d.text((260,380),"BUY - CALL - صعود ⬆", fill=(255,255,255))
+            img.save(buy_path)
+        if not os.path.exists(sell_path):
+            img=Image.new('RGB',(800,450),(239,68,68))
+            d=ImageDraw.Draw(img)
+            d.polygon([(400,330),(280,190),(330,190),(330,70),(470,70),(470,190),(520,190)], fill=(255,255,255))
+            d.text((250,380),"SELL - PUT - هبوط ⬇", fill=(255,255,255))
+            img.save(sell_path)
+        # لو فيه B64 قديم استخدمه
         if BUY_B64:
-            with open("/tmp/bot_images/buy.jpg","wb") as f:
-                f.write(base64.b64decode(BUY_B64))
+            with open(buy_path,"wb") as f: f.write(base64.b64decode(BUY_B64))
         if SELL_B64:
-            with open("/tmp/bot_images/sell.jpg","wb") as f:
-                f.write(base64.b64decode(SELL_B64))
-        logging.info("Images checked")
+            with open(sell_path,"wb") as f: f.write(base64.b64decode(SELL_B64))
+        logging.info(f"Images ready BUY:{os.path.exists(buy_path)} SELL:{os.path.exists(sell_path)}")
     except Exception as e:
-        logging.error(f"setup {e}")
+        logging.error(f"setup images {e}")
+
 
 setup_images()
 
@@ -230,7 +247,21 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
         if price>recent_high: bullish+=1
         if price<recent_low: bearish+=1
         trend_strength=max(bullish,bearish)
-        if trend_strength<5: return None
+        # FIX: رفع الحد من 5 الى 6 لتجنب اشارات ضعيفة مثل USD/CAD اللي خسرت
+        if trend_strength<6: return None
+        # FIX: فلتر ارهاق الشمعة - لو شمعة كبيرة خضراء قبلها مباشرة + RSI متوسط = لا تدخل صعود
+        try:
+            prev_close=float(close.iloc[-2]) if len(close)>1 else price
+            prev_open=float(df_m5['Open'].iloc[-2]) if 'Open' in df_m5.columns and len(df_m5)>1 else prev_close
+            prev_candle_pct=abs(prev_close-prev_open)/prev_close*100 if prev_close else 0
+            # شمعة كبيرة جدا + محاولة صعود بعده = ارهاق
+            if prev_candle_pct>0.08 and rsi_now>50 and rsi_now<65:
+                # اذا الشمعة السابقة خضراء كبيرة واشارتنا صعود = احتمال انعكاس
+                if prev_close>prev_open:
+                    # لازم RSI يكون صاعد بقوة مو متذبذب
+                    if rsi_now<=rsi_prev:
+                        return None
+        except: pass
         if bullish>=5 and bullish>bearish: signal="CALL"; signal_ar="صعود"
         elif bearish>=5 and bearish>bullish: signal="PUT"; signal_ar="هبوط"
         else:
@@ -257,7 +288,12 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
         h1_ok = (trend_h1_bullish and signal=="CALL") or (not trend_h1_bullish and signal=="PUT")
         # اضافة معلومات الوقت
         info_time = MARKET_HOURS.get(symbol, {})
-        return {"pair":CLEAN.get(symbol,symbol),"flag":FLAGS.get(symbol,""),"signal":signal,"signal_ar":signal_ar,"conf":conf,"score":score,"price":price,"strength":strength,"conf_text":conf_text,"rsi_m5":rsi_now,"align_num":trend_strength,"symbol":symbol,"atr":atr_now,"best_expiry":best_expiry,"best_expiry_m":best_expiry_m,"expiry_reason":expiry_reason,"m15_confirm":m15_ok,"h1_confirm":h1_ok,"m15_str":m15_strength,"h1_str":h1_strength,"best_time":info_time.get("best_time",""),"session":info_time.get("session",""),"best_days":info_time.get("best_days","")}
+        # فلتر اضافي: السعر لازم يكون فوق EMA20 للصعود وتحت للهبوط
+    if signal=="CALL" and price < ema20_now:
+        return None
+    if signal=="PUT" and price > ema20_now:
+        return None
+    return {"pair":CLEAN.get(symbol,symbol),"flag":FLAGS.get(symbol,""),"signal":signal,"signal_ar":signal_ar,"conf":conf,"score":score,"price":price,"strength":strength,"conf_text":conf_text,"rsi_m5":rsi_now,"align_num":trend_strength,"symbol":symbol,"atr":atr_now,"best_expiry":best_expiry,"best_expiry_m":best_expiry_m,"expiry_reason":expiry_reason,"m15_confirm":m15_ok,"h1_confirm":h1_ok,"m15_str":m15_strength,"h1_str":h1_strength,"best_time":info_time.get("best_time",""),"session":info_time.get("session",""),"best_days":info_time.get("best_days","")}
     except Exception as e:
         logging.error(f"analyze {symbol} {e}")
         return None
@@ -321,7 +357,7 @@ def get_best():
             if r: results.append(r)
             time.sleep(2)
     if not results: return None
-    filtered = [r for r in results if r["score"]>=88 and r["m15_confirm"] and r["h1_confirm"]]
+    filtered = [r for r in results if r["score"]>=90 and r["m15_confirm"] and r["h1_confirm"] and r["align_num"]>=6]  # رفع من 88 الى 90 + لازم 6 مؤشرات
     if not filtered:
         logging.info("No agreed M15/H1 signals - skipping")
         return None
