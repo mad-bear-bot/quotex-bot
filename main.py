@@ -37,9 +37,9 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     flask_app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
-SYMBOLS = ["EURUSD=X","GBPUSD=X","USDJPY=X","AUDUSD=X","USDCAD=X","EURJPY=X","GBPJPY=X"]
-CLEAN = {"EURUSD=X":"EUR/USD","GBPUSD=X":"GBP/USD","USDJPY=X":"USD/JPY","AUDUSD=X":"AUD/USD","USDCAD=X":"USD/CAD","EURJPY=X":"EUR/JPY","GBPJPY=X":"GBP/JPY"}
-FLAGS = {"EURUSD=X":"🇪🇺🇺🇸","GBPUSD=X":"🇬🇧🇺🇸","USDJPY=X":"🇺🇸🇯🇵","AUDUSD=X":"🇦🇺🇺🇸","USDCAD=X":"🇺🇸🇨🇦","EURJPY=X":"🇪🇺🇯🇵","GBPJPY=X":"🇬🇧🇯🇵"}
+SYMBOLS = ["EURUSD=X","USDJPY=X","AUDUSD=X","USDCAD=X","EURJPY=X","USDCHF=X","AUDJPY=X","EURAUD=X","AUDCAD=X","CADJPY=X"]
+CLEAN = {"EURUSD=X":"EUR/USD","USDJPY=X":"USD/JPY","AUDUSD=X":"AUD/USD","USDCAD=X":"USD/CAD","EURJPY=X":"EUR/JPY","USDCHF=X":"USD/CHF","AUDJPY=X":"AUD/JPY","EURAUD=X":"EUR/AUD","AUDCAD=X":"AUD/CAD","CADJPY=X":"CAD/JPY"}
+FLAGS = {"EURUSD=X":"🇪🇺🇺🇸","USDJPY=X":"🇺🇸🇯🇵","AUDUSD=X":"🇦🇺🇺🇸","USDCAD=X":"🇺🇸🇨🇦","EURJPY=X":"🇪🇺🇯🇵","USDCHF=X":"🇺🇸🇨🇭","AUDJPY=X":"🇦🇺🇯🇵","EURAUD=X":"🇪🇺🇦🇺","AUDCAD=X":"🇦🇺🇨🇦","CADJPY=X":"🇨🇦🇯🇵"}
 
 state = {"auth":{},"paused":{},"expiry":{},"auto":{},"trades":{}}
 def save_state(s):
@@ -440,10 +440,11 @@ def get_trades_text(cid):
 
 def markets_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("EUR/USD 🇪🇺🇺🇸", callback_data="m_EURUSD=X"), InlineKeyboardButton("GBP/USD 🇬🇧🇺🇸", callback_data="m_GBPUSD=X")],
-        [InlineKeyboardButton("USD/JPY 🇺🇸🇯🇵", callback_data="m_USDJPY=X"), InlineKeyboardButton("AUD/USD 🇦🇺🇺🇸", callback_data="m_AUDUSD=X")],
-        [InlineKeyboardButton("USD/CAD 🇺🇸🇨🇦", callback_data="m_USDCAD=X"), InlineKeyboardButton("EUR/JPY 🇪🇺🇯🇵", callback_data="m_EURJPY=X")],
-        [InlineKeyboardButton("GBP/JPY 🇬🇧🇯🇵", callback_data="m_GBPJPY=X")],
+        [InlineKeyboardButton("EUR/USD 🇪🇺🇺🇸", callback_data="m_EURUSD=X"), InlineKeyboardButton("USD/JPY 🇺🇸🇯🇵", callback_data="m_USDJPY=X")],
+        [InlineKeyboardButton("AUD/USD 🇦🇺🇺🇸", callback_data="m_AUDUSD=X"), InlineKeyboardButton("USD/CAD 🇺🇸🇨🇦", callback_data="m_USDCAD=X")],
+        [InlineKeyboardButton("EUR/JPY 🇪🇺🇯🇵", callback_data="m_EURJPY=X"), InlineKeyboardButton("USD/CHF 🇺🇸🇨🇭", callback_data="m_USDCHF=X")],
+        [InlineKeyboardButton("AUD/JPY 🇦🇺🇯🇵", callback_data="m_AUDJPY=X"), InlineKeyboardButton("EUR/AUD 🇪🇺🇦🇺", callback_data="m_EURAUD=X")],
+        [InlineKeyboardButton("AUD/CAD 🇦🇺🇨🇦", callback_data="m_AUDCAD=X"), InlineKeyboardButton("CAD/JPY 🇨🇦🇯🇵", callback_data="m_CADJPY=X")],
         [InlineKeyboardButton("🔙 رجوع", callback_data="back_main")]
     ])
 
@@ -610,8 +611,9 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 last_global_send=0
 last_sent_info=""
+last_sent_per_symbol={}  # تتبع كل سوق لحاله
 async def check_signals(context: ContextTypes.DEFAULT_TYPE):
-    global last_global_send, last_sent_info
+    global last_global_send, last_sent_info, last_sent_per_symbol
     now=time.time()
     if now-last_global_send<180: return
     try:
@@ -623,6 +625,20 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
             return
         # فلتر قوي ما يخسر - لازم 88+
         if best["score"]<88: return
+        # منع التكرار لنفس السوق - 15 دقيقة نفس الاتجاه
+        symbol = best["symbol"]
+        signal = best["signal"]
+        last_info = last_sent_per_symbol.get(symbol)
+        if last_info:
+            last_time, last_signal = last_info
+            # نفس السوق ونفس الاتجاه خلال 15 دقيقة = لا ترسل
+            if last_signal == signal and (now - last_time) < 900:
+                logging.info(f"Skipping duplicate {best['pair']} {signal} - sent {(now-last_time)/60:.1f}m ago")
+                return
+            # نفس السوق حتى لو اتجاه مختلف خلال 10 دقايق = لا ترسل (تذبذب)
+            if (now - last_time) < 600:
+                logging.info(f"Skipping same market {best['pair']} too soon")
+                return
         if last_sent_info==best["pair"] and (now-last_global_send)<300: return
         sent=0
         for cid, ok in list(state.get("auth",{}).items()):
@@ -636,6 +652,7 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
         if sent>0:
             last_global_send=now
             last_sent_info=best["pair"]
+            last_sent_per_symbol[symbol]=(now, signal)
     except Exception as e:
         logging.error(f"check {e}")
 
