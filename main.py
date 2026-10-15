@@ -264,11 +264,6 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
             return None
         if abs(m15_strength)<1 or abs(h1_strength)<1:
             return None
-        # FIX: اذا M15 يقول هبوط ضعيف -1 و RSI قريب من تشبع بيعي لا تدخل PUT
-        if signal=="PUT" and rsi_now<40 and m15_strength==-1 and h1_strength==-1:
-            return None
-        if signal=="CALL" and rsi_now>60 and m15_strength==1 and h1_strength==1:
-            return None
         try:
             prev_close=float(close.iloc[-2]) if len(close)>1 else price
             prev_open=float(df_m5['Open'].iloc[-2]) if 'Open' in df_m5.columns and len(df_m5)>1 else prev_close
@@ -278,11 +273,23 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
                     return None
         except: pass
 
+        # تحديد الاشارة - مضمون signal موجود
+        signal = None
+        signal_ar = ""
         if bullish>=6 and bullish>bearish: signal="CALL"; signal_ar="صعود"
         elif bearish>=6 and bearish>bullish: signal="PUT"; signal_ar="هبوط"
         else:
             if bullish>bearish: signal="CALL"; signal_ar="صعود"
             else: signal="PUT"; signal_ar="هبوط"
+
+        if not signal:
+            return None
+
+        # FIX: اذا RSI قريب تشبع لا تدخل عكس
+        if signal=="PUT" and rsi_now<40 and m15_strength==-1 and h1_strength==-1:
+            return None
+        if signal=="CALL" and rsi_now>60 and m15_strength==1 and h1_strength==1:
+            return None
 
         if signal=="CALL" and price < ema20_now:
             return None
@@ -297,7 +304,7 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
         try:
             curr_open=float(df_m5['Open'].iloc[-1]) if 'Open' in df_m5.columns else price
             curr_pct=abs(price-curr_open)/curr_open*100 if curr_open else 0
-            if curr_pct>0.10:  # شمعة كبيرة جدا حالية = لا تدخل
+            if curr_pct>0.10:
                 return None
         except: pass
 
