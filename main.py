@@ -582,19 +582,19 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         await query.edit_message_text(f"⏳ تحليل {CLEAN.get(sym,sym)} بتحليل قوي...")
         r=analyze_real_tradingview(sym)
-            elif query.data=="auto_start":
+        if r:
+            try: await query.message.delete()
+            except: pass
+            await send_signal_with_image(context,cid,r)
+            await context.bot.send_message(chat_id=int(cid), text="🎯 القائمة", reply_markup=main_keyboard())
+        else:
+            await query.edit_message_text("⚠ لا توجد إشارة قوية - تجنب الخسارة، انتظر", reply_markup=main_keyboard())
+    elif query.data=="auto_start":
         state.setdefault("auto",{})[cid]=True
         save_state(state)
-        await query.edit_message_text("✅ **البوت التلقائي يعمل**\n\n💎 إشارات VIP كل 3 دقائق\n📈 دقة 90%+ (6 مؤشرات)\n🕐 فلتر وقت ذكي جدة\n🌍 10 REAL\n📊 فلتر EMA20: مفعل\n💵 الثلاثاء-الخميس أفضل وقت", reply_markup=main_keyboard(), parse_mode='Markdown')
+        await query.edit_message_text("✅ **البوت التلقائي يعمل - 10 REAL + وقت جدة + EMA20**\n\n💎 إشارات VIP كل 3 دقائق\n📈 دقة 90%+ (6 مؤشرات)\n🕐 فلتر وقت ذكي جدة\n🌍 10 أسواق حقيقية", reply_markup=main_keyboard(), parse_mode='Markdown')
     elif query.data=="auto_stop":
         state.setdefault("auto",{})[cid]=False
-        save_state(state)
-        await query.edit_message_text("🛑 **متوقف**", reply_markup=main_keyboard(), parse_mode='Markdown')
-    elif query.data=="stats":
-        await query.edit_message_text("📊 **الإحصائيات:**\n\n📡 10 مؤشرات + M15/H1 قوة 2+2\n📊 10 أسواق حقيقية REAL\n✅ 90+ فقط - فلتر وقت جدة\n⏱ مدة ذكية 1M-5M\n🕐 بتوقيت جدة\n🌍 بدون OTC", reply_markup=main_keyboard(), parse_mode='Markdown')
-    elif query.data=="settings":
-        auto="شغال 🟢" if state.get("auto",{}).get(cid) else "متوقف 🔴"
-        await query.edit_message_text(f"⚙ **الإعدادات:**\n\n🤖 تلقائي: {auto}\n🔐 البوت محمي \n🕐 فلتر وقت جدة: مفعل\n🌍 10 REAL\n📊 فلتر EMA20: مفعل\n📊 الأيام: الثلاثاء-الخميس أفضل وقت 💵", reply_markup=main_keyboard(), parse_mode='Markdown')
         save_state(state)
         await query.edit_message_text("🛑 **متوقف**", reply_markup=main_keyboard(), parse_mode='Markdown')
     elif query.data=="stats":
