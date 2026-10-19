@@ -262,7 +262,7 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
         # FIX CRITICAL: اذا M15 و H1 متذبذبين (قوة 0) لا ترسل اشارة - هذا سبب خسارة USD/JPY
         if not m15_confirm or not h1_confirm:
             return None
-        if abs(m15_strength)<1 or abs(h1_strength)<1:
+        if abs(m15_strength)<2 or abs(h1_strength)<2:
             return None
         try:
             prev_close=float(close.iloc[-2]) if len(close)>1 else price
