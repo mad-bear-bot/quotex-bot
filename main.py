@@ -234,9 +234,9 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
         elif ema20_now<ema50_now and ema50_now<ema200_now: bearish+=2
         elif ema20_now>ema50_now: bullish+=1
         else: bearish+=1
-        if rsi_now>75: # ANTI-LOSS stricter was 80
+        if rsi_now>80:
             if bullish>=bearish: return None
-        if rsi_now<25: # ANTI-LOSS stricter was 20
+        if rsi_now<20:
             if bearish>=bullish: return None
         if 40<rsi_now<70 and rsi_now>rsi_prev and rsi_prev>rsi_prev2: bullish+=1
         elif 30<rsi_now<60 and rsi_now<rsi_prev and rsi_prev<rsi_prev2: bearish+=1
@@ -246,11 +246,8 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
         if 20<=rsi_now<=30 and bearish>bullish: bearish-=1
         if macd_now>macd_sig_now and macd_now>macd_prev: bullish+=1
         elif macd_now<macd_sig_now and macd_now<macd_prev: bearish+=1
-        # ANTI-LOSS: لا تطارد القمم - لو السعر عند القمة لا تدخل
-        if price>=last_high*0.9995:
-            if rsi_now>65: return None # تشبع عند القمة = خسارة
-        if price<=last_low*1.0005:
-            if rsi_now<35: return None # تشبع عند القاع = خسارة
+        if price>=last_high*0.9998: bullish+=1
+        if price<=last_low*1.0002: bearish+=1
         if trend_m15_bullish and m15_strength>0: bullish+=1
         elif not trend_m15_bullish and m15_strength<0: bearish+=1
         if trend_h1_bullish and h1_strength>0: bullish+=1
@@ -260,12 +257,12 @@ def analyze_from_dataframe(symbol, df_m5, df_m15=None, df_h1=None):
         if price>recent_high: bullish+=1
         if price<recent_low: bearish+=1
         trend_strength=max(bullish,bearish)
-        if trend_strength<7: # ANTI-LOSS: رفع من 6 الى 7
+        if trend_strength<6:
             return None
         # FIX CRITICAL: اذا M15 و H1 متذبذبين (قوة 0) لا ترسل اشارة - هذا سبب خسارة USD/JPY
         if not m15_confirm or not h1_confirm:
             return None
-        if abs(m15_strength)<2 or abs(h1_strength)<2: # ANTI-LOSS 2+2 FIX
+        if abs(m15_strength)<1 or abs(h1_strength)<1:
             return None
         try:
             prev_close=float(close.iloc[-2]) if len(close)>1 else price
@@ -344,15 +341,12 @@ def analyze_real_tradingview(symbol):
         for attempt in range(2):
             try:
                 ticker=yf.Ticker(symbol)
-                df_m5=ticker.history(period="2d", interval="5m", auto_adjust=False)
-                df_m15=ticker.history(period="5d", interval="15m", auto_adjust=False)
-                df_h1=ticker.history(period="1mo", interval="60m", auto_adjust=False)
+                df_m5=ticker.history(period="5d", interval="5m", auto_adjust=False)
                 if df_m5.empty or len(df_m5)<20:
                     time.sleep(1)
-                    continue
+                    df_m5=ticker.history(period="1mo", interval="15m", auto_adjust=False)
                 if not df_m5.empty and len(df_m5)>=20:
-                    # FIX ANTI-LOSS: استخدام فريمات حقيقية مو نفس الفريم
-                    return analyze_from_dataframe(symbol, df_m5, df_m15, df_h1)
+                    return analyze_from_dataframe(symbol, df_m5, df_m5, df_m5)
             except Exception as e:
                 if "429" in str(e) or "rate-limited" in str(e).lower():
                     time.sleep(5)
