@@ -401,22 +401,45 @@ async def send_signal_with_image(context, cid, r, save_to_history=True):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cid=str(update.effective_chat.id)
     if cid not in state.get("auth",{}):
-        await update.message.reply_text("🔐 ادخل الرقم السري:")
+        await update.message.reply_text("🔐 ادخل الرقم السري: 🔑")
         return
     await update.message.reply_text("🎯 **V3.3 LEGENDARY - أسطوري**\n\n⚡ 4 فريمات M5/M15/M30/H1 LIVE REAL\n💎 قوة 2+2+2 أسطورية\n📊 15 تحليل حقيقي\n🖼️ صور BUY/SELL نيون جديدة\n📜 سجل كل الإشارات", reply_markup=main_keyboard(), parse_mode='Markdown')
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cid=str(update.effective_chat.id)
     txt=update.message.text.strip()
+    user_msg_id = update.message.message_id
+    # حاول تحذف رسالة الرقم السري فوراً (عشان ما يبقى ظاهر)
+    try:
+        await context.bot.delete_message(chat_id=int(cid), message_id=user_msg_id)
+    except:
+        pass
+    
     if txt==PASSWORD:
         state.setdefault("auth",{})[cid]=True
         save_state(state)
-        await update.message.reply_text("✅ تم ✅\n\n🔥 V3.3 LEGENDARY - 2+2+2 + 15 ANALYTICS\n🖼️ صور نيون جديدة", reply_markup=main_keyboard(), parse_mode='Markdown')
+        # رسالة مؤقتة "تم فتح البوت" تختفي بعد 5 ثواني
+        temp_msg = await context.bot.send_message(chat_id=int(cid), text="تم فتح البوت ✅")
+        import asyncio
+        await asyncio.sleep(5)
+        try:
+            await context.bot.delete_message(chat_id=int(cid), message_id=temp_msg.message_id)
+        except:
+            pass
+        # بعد 5 ثواني تظهر القائمة
+        await context.bot.send_message(chat_id=int(cid), text="اختر من القائمة ⬇️", reply_markup=main_keyboard(), parse_mode='Markdown')
     else:
         if cid not in state.get("auth",{}):
-            await update.message.reply_text("🔐 الرقم خطأ")
+            # إذا الرقم خطأ احذف رسالته بعد ثانية
+            err = await context.bot.send_message(chat_id=int(cid), text="🔐 الرقم السري خطأ")
+            import asyncio
+            await asyncio.sleep(2)
+            try:
+                await context.bot.delete_message(chat_id=int(cid), message_id=err.message_id)
+            except:
+                pass
         else:
-            await update.message.reply_text("🎯 القائمة", reply_markup=main_keyboard(), parse_mode='Markdown')
+            await context.bot.send_message(chat_id=int(cid), text="اختر من القائمة ⬇️", reply_markup=main_keyboard(), parse_mode='Markdown')
 
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query
