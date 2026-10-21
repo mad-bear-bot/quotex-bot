@@ -1,11 +1,20 @@
 import os, time, logging, requests, base64
 from datetime import datetime
 import threading
-import yfinance as yf
 import pytz
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+os.environ['XDG_CACHE_HOME'] = '/tmp'
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
+try:
+    os.makedirs('/tmp/py-yfinance', exist_ok=True)
+    import yfinance as yf
+    yf.set_tz_cache_location('/tmp/py-yfinance')
+    logging.info('TzCache fixed to /tmp')
+except Exception as e:
+    logging.warning(f'TzCache fix {e}')
+    import yfinance as yf
+
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8631107180:AAEvTM8sVVHZTerraQsGFW1T44oI1PoQ46YU")
 PASSWORD = os.environ.get("BOT_PASSWORD", "7154")
 
