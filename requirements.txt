@@ -1,3 +1,10 @@
 python-telegram-bot[job-queue]==21.6
 Flask==3.0.0
-[STRIPPED 68 bytes] @ git+https://github.com/ChipaDevTeam/pocketoptionapi.git
+requests
+yfinance
+pandas
+numpy
+pytz
+Pillow
+websocket-client
+pocketoptionapi @ git+https://github.com/ChipaDevTeam/pocketoptionapi.git
