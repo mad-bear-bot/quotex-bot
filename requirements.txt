@@ -6,3 +6,5 @@ pandas
 numpy
 pytz
 Pillow==10.4.0
+pocketoptionapi
+websocket-client
