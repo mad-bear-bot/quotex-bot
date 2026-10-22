@@ -780,7 +780,17 @@ async def clean(context: ContextTypes.DEFAULT_TYPE):
         save_state(state)
     except: pass
 
+def ensure_loop():
+    try:
+        asyncio.new_event_loop().close()
+    except: pass
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    except: pass
+
 def main():
+    ensure_loop()
     try:
         requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=5)
         time.sleep(1)
