@@ -4,6 +4,19 @@ import threading
 import pytz
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from flask import Flask
+app_flask = Flask(__name__)
+
+@app_flask.route('/')
+def home():
+    return "Bot is running - V5 FREE ULTRA"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app_flask.run(host='0.0.0.0', port=port)
+
+
+
 # === STEALTH MODE - اخفاء كل التحذيرات ===
 warnings.filterwarnings('ignore')
 os.environ['XDG_CACHE_HOME'] = '/tmp'
