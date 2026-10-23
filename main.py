@@ -26,13 +26,32 @@ def run_flask():
 
 
 # === STEALTH MODE - اخفاء كل التحذيرات ===
-warnings.filterwarnings('ignore')
+import warnings as _w
+_w.filterwarnings('ignore')
+_w.simplefilter('ignore')
+try:
+    import pandas as _pd
+    _w.filterwarnings('ignore', category=_pd.errors.SettingWithCopyWarning)
+    _w.filterwarnings('ignore', category=_pd.errors.PerformanceWarning)
+except:
+    pass
 os.environ['XDG_CACHE_HOME'] = '/tmp'
 os.environ['PYTHONWARNINGS'] = 'ignore'
+# اخفاء PandasWarning PDEP-8 اللي طالع في الصورة
+_w.filterwarnings('ignore', message='.*inplace.*')
+_w.filterwarnings('ignore', message='.*PDEP-8.*')
+_w.filterwarnings('ignore', message='.*sort_index.*')
+_w.filterwarnings('ignore', category=DeprecationWarning)
+_w.filterwarnings('ignore', category=FutureWarning)
+_w.filterwarnings('ignore', category=UserWarning)
+_w.filterwarnings('ignore', category=Warning)
 
 logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(message)s")
 logging.getLogger('yfinance').setLevel(logging.CRITICAL)
 logging.getLogger('urllib3').setLevel(logging.CRITICAL)
+logging.getLogger('pandas').setLevel(logging.CRITICAL)
+logging.getLogger('pandas.core').setLevel(logging.CRITICAL)
+
 
 try:
     os.makedirs('/tmp/py-yfinance', exist_ok=True)
@@ -44,8 +63,11 @@ except Exception as e:
 
 import pandas as pd
 pd.options.mode.chained_assignment = None
+_w.filterwarnings('ignore')
+_w.simplefilter('ignore')
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
+warnings.filterwarnings('ignore', category=Warning)
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8631107180:AAEvTM8sVVHZTerraQsGFW1T44oI1PoQ46YU")
 PASSWORD = os.environ.get("BOT_PASSWORD", "7154")
