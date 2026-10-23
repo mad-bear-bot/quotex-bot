@@ -9,7 +9,15 @@ app_flask = Flask(__name__)
 
 @app_flask.route('/')
 def home():
-    return "Bot is running - V5 FREE ULTRA"
+    return "Bot is running - V5 FREE ULTRA - 4TF REAL + 5 SOURCES VERIFIED"
+
+@app_flask.route('/health')
+def health():
+    return "OK - Bot Alive", 200
+
+@app_flask.route('/ping')
+def ping():
+    return "pong", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -949,18 +957,35 @@ async def clean(context: ContextTypes.DEFAULT_TYPE):
     except: pass
 
 def main():
+    # حذف webhook + pending updates قبل البدء - يمنع Conflict
+    for _ in range(3):
+        try:
+            requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=10)
+            time.sleep(2)
+        except: 
+            pass
+    
+    # حذف getUpdates المتعلقة
     try:
-        requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=5)
-        time.sleep(1)
-    except: pass
+        requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset=-1", timeout=5)
+    except:
+        pass
+        
+    time.sleep(3)
+    
     app=Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(buttons))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.job_queue.run_repeating(check_signals, interval=180, first=30)
     app.job_queue.run_repeating(clean, interval=3600, first=60)
-    logging.info("Bot started")
-    app.run_polling(drop_pending_updates=True, close_loop=False, allowed_updates=Update.ALL_TYPES)
+    logging.info("Bot started - V5 FREE ULTRA READY")
+    print("=== BOT STARTED ===")
+    print(f"BOT_TOKEN: {BOT_TOKEN[:10]}...")
+    print(f"PASSWORD: {PASSWORD}")
+    # drop_pending_updates=True مهم عشان يرد على /start الجديد
+    app.run_polling(drop_pending_updates=True, close_loop=False, allowed_updates=Update.ALL_TYPES, poll_interval=2.0)
+
 
 if __name__=="__main__":
     threading.Thread(target=run_flask, daemon=True).start()
