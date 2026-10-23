@@ -1,33 +1,30 @@
 import os, time, logging, requests, base64, warnings
 from datetime import datetime
-import threading
-import pytz
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# اخفاء كل التحذيرات نهائياً - STEALTH MODE
 warnings.filterwarnings('ignore')
 os.environ['XDG_CACHE_HOME'] = '/tmp'
 os.environ['PYTHONWARNINGS'] = 'ignore'
-
-# اخفاء logs المزعجة
-logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(message)s")
+logging.basicConfig(level=logging.ERROR)
 logging.getLogger('yfinance').setLevel(logging.CRITICAL)
 logging.getLogger('urllib3').setLevel(logging.CRITICAL)
-
-try:
-    os.makedirs('/tmp/py-yfinance', exist_ok=True)
-    import yfinance as yf
-    yf.set_tz_cache_location('/tmp/py-yfinance')
-except Exception as e:
-    pass
-    import yfinance as yf
-
-# تعطيل warnings الخاصة ب pandas
 import pandas as pd
 pd.options.mode.chained_assignment = None
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
+import threading
+import pytz
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+os.environ['XDG_CACHE_HOME'] = '/tmp'
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(message)s")
+try:
+    os.makedirs('/tmp/py-yfinance', exist_ok=True)
+    import yfinance as yf
+    yf.set_tz_cache_location('/tmp/py-yfinance')
+    pass # TzCache fixed
+except Exception as e:
+    pass
+    import yfinance as yf
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8631107180:AAEvTM8sVVHZTerraQsGFW1T44oI1PoQ46YU")
 PASSWORD = os.environ.get("BOT_PASSWORD", "7154")
@@ -54,9 +51,9 @@ def setup_images():
             with open(buy_path,"wb") as f: f.write(base64.b64decode(BUY_B64))
         if SELL_B64:
             with open(sell_path,"wb") as f: f.write(base64.b64decode(SELL_B64))
-        pass # Images ready
+        logging.info(f"Images ready BUY:{os.path.exists(buy_path)} SELL:{os.path.exists(sell_path)}")
     except Exception as e:
-        pass # setup error hidden
+        logging.error(f"setup {e}")
 setup_images()
 
 from flask import Flask
@@ -524,7 +521,26 @@ def get_signals_history_text(cid):
         txt+=f"\n... و {len(logs)-20} إشارة أقدم"
     return txt
 
-async def send_signal_with_image(context, cid, r, save_to_history=True):
+async def restore_after_expiry(context: ContextTypes.DEFAULT_TYPE):
+    try:
+        data = context.job.data
+        cid = data.get("chat_id")
+        msg_id = data.get("msg_id")
+        try:
+            await context.bot.delete_message(chat_id=int(cid), message_id=msg_id)
+        except:
+            pass
+        await context.bot.send_message(
+            chat_id=int(cid),
+            text="""✅ انتهت الصفقة - الأزرار رجعت
+
+⚡ جاري البحث عن إشارة جديدة...""",
+            reply_markup=main_keyboard()
+        )
+    except Exception as e:
+        logging.error(f"restore {e}")
+
+async def send_signal_with_image(context, cid, r, save_to_history=True, is_auto=False):
     try:
         if save_to_history:
             from datetime import datetime
@@ -536,13 +552,41 @@ async def send_signal_with_image(context, cid, r, save_to_history=True):
             save_state(state)
         buy_path="/tmp/bot_images/buy.jpg"; sell_path="/tmp/bot_images/sell.jpg"
         img_path=buy_path if r["signal"]=="CALL" else sell_path
-        # V4.2 يوضح اذا انعكاس
         reversal_tag = " 🔄 انعكاس 100%" if r.get("reversal") else ""
-        caption=f"{r['flag']} **{r['pair']}** {r['signal_ar']}{reversal_tag}\n\n🎯 سكور: {r['score']} (100% متاكد)\n📊 {r['strength_txt']}\n📈 ترند: {r['trend']}/15\n📊 RSI: {r['rsi']:.1f} | ATR: {r['atr_pct']:.3f}%\n⏱ المدة: {r['best_expiry_m']}\n💡 {r['reason']}\n\n🔥 V4.3 DUAL SOURCE 99% - 2+2+2 + 15 ANALYTICS + انعكاس تشبع\n📡 LIVE REAL yfinance - تحاليل حقيقية 100%"
-        if os.path.exists(img_path):
-            await context.bot.send_photo(chat_id=int(cid), photo=open(img_path,'rb'), caption=caption, parse_mode='Markdown')
+        caption = f"""{r['flag']} **{r['pair']}** {r['signal_ar']}{reversal_tag}
+
+🎯 سكور: {r['score']} (100% متاكد)
+📊 {r['strength_txt']}
+📈 ترند: {r['trend']}/15
+📊 RSI: {r['rsi']:.1f} | ATR: {r['atr_pct']:.3f}%
+⏱ المدة: {r['best_expiry_m']}
+💡 {r['reason']}
+
+🔥 V4.3 DUAL SOURCE 99% - 2+2+2 + 15 ANALYTICS + انعكاس تشبع
+📡 LIVE REAL yfinance - تحاليل حقيقية 100%"""
+        if is_auto:
+            if os.path.exists(img_path):
+                sent_msg = await context.bot.send_photo(chat_id=int(cid), photo=open(img_path,'rb'), caption=caption, parse_mode='Markdown')
+            else:
+                sent_msg = await context.bot.send_message(chat_id=int(cid), text=caption, parse_mode='Markdown')
+            expiry_str = r.get("best_expiry_m","3 د")
+            try:
+                minutes = int(''.join(filter(str.isdigit, expiry_str)) or 3)
+            except:
+                minutes = 3
+            minutes = max(1, min(minutes, 5))
+            context.job_queue.run_once(
+                restore_after_expiry,
+                when=minutes*60,
+                data={"chat_id": cid, "msg_id": sent_msg.message_id},
+                name=f"restore_{cid}_{sent_msg.message_id}"
+            )
+            return sent_msg
         else:
-            await context.bot.send_message(chat_id=int(cid), text=caption, parse_mode='Markdown')
+            if os.path.exists(img_path):
+                await context.bot.send_photo(chat_id=int(cid), photo=open(img_path,'rb'), caption=caption, parse_mode='Markdown')
+            else:
+                await context.bot.send_message(chat_id=int(cid), text=caption, parse_mode='Markdown')
     except Exception as e:
         logging.error(f"send {e}")
         try: await context.bot.send_message(chat_id=int(cid), text=f"{r['flag']} {r['pair']} {r['signal_ar']} {r['score']}")
@@ -638,18 +682,18 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data=="auto_start":
         state.setdefault("auto",{})[cid]=True
         save_state(state)
-        await query.edit_message_text("""◤ SYSTEM ACTIVE ◥
-━━━━━━━◆━━━━━━━
-⚡ SCANNING MARKETS
+        await query.edit_message_text("""النظام شغال ✅
+
+⚡ جاري مسح الأسواق
 M5 • M15 • M30 • H1
 
-◣ CORE MATRIX ◢
-━━━━◆━━━━
+المصفوفة الأساسية
+
 ⏱️ 03 • 📡 DS • 📈 TF
 💎 PW • 🧠 AI • 🔄 RV
 🛡️ 96+ • ⚡ 08 • 📜 LG
-━━━━━━━◆━━━━━━━
-🟢 ONLINE • READY""", reply_markup=main_keyboard(), parse_mode='Markdown')
+
+🟢 متصل • جاهز للعمل""", reply_markup=main_keyboard(), parse_mode='Markdown')
     elif query.data=="auto_stop":
         state.setdefault("auto",{})[cid]=False
         save_state(state)
@@ -707,7 +751,7 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
             if state.get("paused",{}).get(cid): continue
             if not state.get("auto",{}).get(cid): continue
             try:
-                await send_signal_with_image(context, cid, best, save_to_history=True)
+                await send_signal_with_image(context, cid, best, save_to_history=True, is_auto=True)
                 sent+=1
             except: pass
         if sent>0:
