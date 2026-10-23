@@ -1,19 +1,33 @@
-import os, time, logging, requests, base64
+import os, time, logging, requests, base64, warnings
 from datetime import datetime
 import threading
 import pytz
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# اخفاء كل التحذيرات نهائياً - STEALTH MODE
+warnings.filterwarnings('ignore')
 os.environ['XDG_CACHE_HOME'] = '/tmp'
-logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(message)s")
+os.environ['PYTHONWARNINGS'] = 'ignore'
+
+# اخفاء logs المزعجة
+logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(message)s")
+logging.getLogger('yfinance').setLevel(logging.CRITICAL)
+logging.getLogger('urllib3').setLevel(logging.CRITICAL)
+
 try:
     os.makedirs('/tmp/py-yfinance', exist_ok=True)
     import yfinance as yf
     yf.set_tz_cache_location('/tmp/py-yfinance')
-    pass # TzCache fixed
 except Exception as e:
     pass
     import yfinance as yf
+
+# تعطيل warnings الخاصة ب pandas
+import pandas as pd
+pd.options.mode.chained_assignment = None
+warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore', category=UserWarning)
+
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8631107180:AAEvTM8sVVHZTerraQsGFW1T44oI1PoQ46YU")
 PASSWORD = os.environ.get("BOT_PASSWORD", "7154")
@@ -40,9 +54,9 @@ def setup_images():
             with open(buy_path,"wb") as f: f.write(base64.b64decode(BUY_B64))
         if SELL_B64:
             with open(sell_path,"wb") as f: f.write(base64.b64decode(SELL_B64))
-        logging.info(f"Images ready BUY:{os.path.exists(buy_path)} SELL:{os.path.exists(sell_path)}")
+        pass # Images ready
     except Exception as e:
-        logging.error(f"setup {e}")
+        pass # setup error hidden
 setup_images()
 
 from flask import Flask
