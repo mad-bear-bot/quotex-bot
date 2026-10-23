@@ -1,24 +1,51 @@
-import os, time, logging, requests, base64, warnings
-from datetime import datetime
-
-warnings.filterwarnings('ignore')
-os.environ['XDG_CACHE_HOME'] = '/tmp'
+import os, sys, warnings, logging
+# ULTRA STEALTH - اخفاء كل التحذيرات قبل أي استيراد
 os.environ['PYTHONWARNINGS'] = 'ignore'
-logging.basicConfig(level=logging.ERROR)
-logging.getLogger('yfinance').setLevel(logging.CRITICAL)
-logging.getLogger('urllib3').setLevel(logging.CRITICAL)
-import pandas as pd
-pd.options.mode.chained_assignment = None
-warnings.simplefilter(action='ignore', category=FutureWarning)
-warnings.simplefilter(action='ignore', category=UserWarning)
+os.environ['XDG_CACHE_HOME'] = '/tmp'
+os.environ['PANDAS_FUTURE_WARNING'] = '0'
+warnings.filterwarnings('ignore')
+warnings.simplefilter('ignore')
+logging.captureWarnings(True)
+# اخفاء كل انواع التحذيرات
+for cat in [DeprecationWarning, FutureWarning, UserWarning, Warning, PendingDeprecationWarning, RuntimeWarning]:
+    warnings.filterwarnings('ignore', category=cat)
+
+import time, requests, base64
+from datetime import datetime
 import threading
 import pytz
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-os.environ['XDG_CACHE_HOME'] = '/tmp'
-logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(message)s")
+# اخفاء لوقز yfinance و urllib3 و werkzeug
+logging.basicConfig(level=logging.ERROR)
+logging.getLogger('yfinance').setLevel(logging.CRITICAL)
+logging.getLogger('urllib3').setLevel(logging.CRITICAL)
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
+logging.getLogger('pandas').setLevel(logging.CRITICAL)
+
+import pandas as pd
+pd.options.mode.chained_assignment = None
+pd.set_option('mode.chained_assignment', None)
+# باتش لإخفاء تحذير inplace القديم نهائياً
+try:
+    _orig_sort_index = pd.DataFrame.sort_index
+    def _patched_sort_index(self, *args, **kwargs):
+        kwargs.pop('inplace', None)
+        return _orig_sort_index(self, *args, **kwargs)
+    pd.DataFrame.sort_index = _patched_sort_index
+    _orig_sort = pd.DataFrame.sort_values
+    def _patched_sort_values(self, *args, **kwargs):
+        kwargs.pop('inplace', None)
+        return _orig_sort(self, *args, **kwargs)
+    pd.DataFrame.sort_values = _patched_sort_values
+except:
+    pass
+
 try:
     os.makedirs('/tmp/py-yfinance', exist_ok=True)
+    import yfinance as yf
+    yf.set_tz_cache_location('/tmp/py-yfinance')
+except Exception as e:
     import yfinance as yf
     yf.set_tz_cache_location('/tmp/py-yfinance')
     pass # TzCache fixed
