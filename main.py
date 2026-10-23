@@ -624,24 +624,18 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data=="auto_start":
         state.setdefault("auto",{})[cid]=True
         save_state(state)
-        await query.edit_message_text("""جاري فحص الأسواق
-M5 / M15 / M30 / H1
-━━━━━━━◆━━━━━━━━
-جاري تحليل الإشارات
-الاتجاه • القوة • الانعكاس
-━━━━◆━━━━━━━━━━
-⚙️ معلومات النظام
-⏱️ 03 — دورة الفحص
-📡 DS — مصدران للبيانات
-📈 TF — الأطر الزمنية
-🕐 M5 / M15 / M30 / H1
-💎 PW — قوة الإشارة
-🧠 AI — 15 تحليل
-🔄 RV — كشف الانعكاس
-🛡️ SC — الحد الأدنى للسكور 96+
-⚡ 08 — سرعة الفحص بالثواني
-📜 LG — حفظ سجل الإشارات
-النظام جاهز للفحص""", reply_markup=main_keyboard(), parse_mode='Markdown')
+        await query.edit_message_text("""◤ SYSTEM ACTIVE ◥
+━━━━━━━◆━━━━━━━
+⚡ SCANNING MARKETS
+M5 • M15 • M30 • H1
+
+◣ CORE MATRIX ◢
+━━━━◆━━━━
+⏱️ 03 • 📡 DS • 📈 TF
+💎 PW • 🧠 AI • 🔄 RV
+🛡️ 96+ • ⚡ 08 • 📜 LG
+━━━━━━━◆━━━━━━━
+🟢 ONLINE • READY""", reply_markup=main_keyboard(), parse_mode='Markdown')
     elif query.data=="auto_stop":
         state.setdefault("auto",{})[cid]=False
         save_state(state)
