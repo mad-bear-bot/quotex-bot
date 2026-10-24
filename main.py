@@ -23,6 +23,18 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app_flask.run(host='0.0.0.0', port=port)
 
+# === KEEP ALIVE SELF-PING - يصحي نفسه كل 4 دقائق ===
+def self_ping():
+    while True:
+        try:
+            time.sleep(240)  # كل 4 دقائق
+            url = os.environ.get("RENDER_EXTERNAL_URL") or "https://quotex-bot-wqiv.onrender.com"
+            requests.get(f"{url}/health", timeout=5)
+            requests.get(f"{url}/ping", timeout=5)
+            print("SELF-PING OK - Bot stays awake")
+        except Exception as e:
+            print(f"SELF-PING FAIL: {e}")
+
 
 
 # === STEALTH MODE - اخفاء كل التحذيرات ===
@@ -765,7 +777,7 @@ async def send_signal_with_image(context, cid, r, save_to_history=True, is_auto=
         buy_path="/tmp/bot_images/buy.jpg"; sell_path="/tmp/bot_images/sell.jpg"
         img_path=buy_path if r["signal"]=="CALL" else sell_path
         reversal_tag = " 🔄 انعكاس 100%" if r.get("reversal") else ""
-        caption=f"{r['flag']} **{r['pair']}** {r['signal_ar']}{reversal_tag}\n\n🎯 سكور: {r['score']} (100% متاكد)\n📊 {r['strength_txt']}\n📈 ترند: {r['trend']}/15\n📊 RSI: {r['rsi']:.1f} | ATR: {r['atr_pct']:.3f}%\n⏱ المدة: {r['best_expiry_m']}\n💡 {r['reason']}\n\n🔥 V4.3 DUAL SOURCE 99% - 2+2+2 + 15 ANALYTICS + انعكاس تشبع\n📡 LIVE REAL yfinance - تحاليل حقيقية 100%"
+        caption=f"{r['flag']} **{r['pair']}** {r['signal_ar']}{reversal_tag}\n\n🎯 سكور: {r['score']} (100% متاكد)\n📊 {r['strength_txt']}\n📈 ترند: {r['trend']}/15\n📊 RSI: {r['rsi']:.1f} | ATR: {r['atr_pct']:.3f}%\n⏱ المدة: {r['best_expiry_m']}\n💡 {r['reason']}\n\n🔥 V5 FINAL - 10 تحاليل + 5 مصادر + انعكاس تشبع\n📡 LIVE REAL yfinance - تحاليل حقيقية 100%\n⏳ تنحذف تلقائياً بعد {r['best_expiry_m']}"
         
         # إذا تلقائي - إخفاء جميع الأزرار وإظهار الإشارة فقط
         if is_auto:
@@ -773,243 +785,34 @@ async def send_signal_with_image(context, cid, r, save_to_history=True, is_auto=
                 sent_msg = await context.bot.send_photo(chat_id=int(cid), photo=open(img_path,'rb'), caption=caption, parse_mode='Markdown')
             else:
                 sent_msg = await context.bot.send_message(chat_id=int(cid), text=caption, parse_mode='Markdown')
-            
-            # تحديد مدة الحذف من best_expiry
-            expiry_str = r.get("best_expiry_m","3 د")
-            try:
-                minutes = int(expiry_str.split()[0]) if expiry_str.split()[0].isdigit() else 3
-            except:
-                minutes = 3
-            minutes = max(1, min(minutes, 5))  # بين 1 و 5 دقائق
-            
-            # جدولة الحذف وإرجاع الأزرار بعد انتهاء الصفقة
-            context.job_queue.run_once(
-                restore_after_expiry,
-                when=minutes*60,
-                data={"chat_id": cid, "msg_id": sent_msg.message_id},
-                name=f"restore_{cid}_{sent_msg.message_id}"
-            )
-            return sent_msg
+            # === حذف تلقائي بعد انتهاء الصفقة (90 ثانية) ===
+            expiry_sec = r.get('best_expiry_sec', 90)
+            context.job_queue.run_once(lambda ctx: delete_signal_job(ctx, cid, sent_msg.message_id), expiry_sec, name=f"del_{sent_msg.message_id}")
+            return
         else:
-            # يدوي - يرسل الإشارة ويرجع الأزرار
             if os.path.exists(img_path):
-                await context.bot.send_photo(chat_id=int(cid), photo=open(img_path,'rb'), caption=caption, parse_mode='Markdown')
+                sent_msg = await context.bot.send_photo(chat_id=int(cid), photo=open(img_path,'rb'), caption=caption, parse_mode='Markdown', reply_markup=main_keyboard())
             else:
-                await context.bot.send_message(chat_id=int(cid), text=caption, parse_mode='Markdown')
+                sent_msg = await context.bot.send_message(chat_id=int(cid), text=caption, parse_mode='Markdown', reply_markup=main_keyboard())
+            # === حذف تلقائي بعد انتهاء الصفقة ===
+            expiry_sec = r.get('best_expiry_sec', 90)
+            context.job_queue.run_once(lambda ctx: delete_signal_job(ctx, cid, sent_msg.message_id), expiry_sec, name=f"del_{sent_msg.message_id}")
     except Exception as e:
-        logging.error(f"send {e}")
-        try: await context.bot.send_message(chat_id=int(cid), text=f"{r['flag']} {r['pair']} {r['signal_ar']} {r['score']}")
-        except: pass
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cid=str(update.effective_chat.id)
-    if cid not in state.get("auth",{}):
-        await update.message.reply_text("🔐 ادخل الرقم السري: 🔑")
-        return
-    await update.message.reply_text("🎯 **V4.3 DUAL SOURCE 99% - أسطوري + انعكاس تشبع**\n\n⚡ 4 فريمات M5/M15/M30/H1 LIVE REAL\n💎 قوة 2+2+2 أسطورية\n📊 15 تحليل حقيقي 100%\n🔄 انعكاس تشبع 100% (شراء->بيع و بيع->شراء)\n✅ فقط اشارات متاكد 100%\n🖼 صور BUY/SELL\n📜 سجل كل الإشارات", reply_markup=main_keyboard(), parse_mode='Markdown')
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cid=str(update.effective_chat.id)
-    txt=update.message.text.strip()
-    user_msg_id = update.message.message_id
-    try:
-        await context.bot.delete_message(chat_id=int(cid), message_id=user_msg_id)
-    except:
-        pass
-    
-    if txt==PASSWORD:
-        state.setdefault("auth",{})[cid]=True
-        save_state(state)
-        temp_msg = await context.bot.send_message(chat_id=int(cid), text="تم فتح البوت ✅")
-        import asyncio
-        await asyncio.sleep(5)
         try:
-            await context.bot.delete_message(chat_id=int(cid), message_id=temp_msg.message_id)
+            await context.bot.send_message(chat_id=int(cid), text=f"{r['flag']} **{r['pair']}** {r['signal_ar']}\n🎯 {r['score']} | {r['strength_txt']} | ⏱{r['best_expiry_m']}\n💡 {r['reason']}", parse_mode='Markdown', reply_markup=main_keyboard())
         except:
             pass
-        await context.bot.send_message(chat_id=int(cid), text="اختر من القائمة ⬇", reply_markup=main_keyboard(), parse_mode='Markdown')
-    else:
-        if cid not in state.get("auth",{}):
-            err = await context.bot.send_message(chat_id=int(cid), text="🔐 الرقم السري خطأ")
-            import asyncio
-            await asyncio.sleep(2)
-            try:
-                await context.bot.delete_message(chat_id=int(cid), message_id=err.message_id)
-            except:
-                pass
-        else:
-            await context.bot.send_message(chat_id=int(cid), text="اختر من القائمة ⬇", reply_markup=main_keyboard(), parse_mode='Markdown')
 
-async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query=update.callback_query
-    await query.answer()
-    cid=str(query.from_user.id)
-    if query.data=="scan_4tf":
-        await query.edit_message_text("⚡ **جاري الفحص...**", reply_markup=main_keyboard())
-        all_s=get_all_signals_legendary(manual=True)
-        if not all_s:
-            await query.edit_message_text("⚠ لا توجد إشارة الآن - انتظر قليلاً", reply_markup=main_keyboard())
-            return
-        txt=f"📈 **إشارات LEGENDARY V4.3 DUAL SOURCE 99% ({len(all_s)}):**\n\n"
-        for r in all_s[:5]:
-            arrow="🟢⬆" if r["signal"]=="CALL" else "🔴⬇"
-            rev=" 🔄" if r.get("reversal") else ""
-            txt+=f"{arrow}{rev} {r['pair']} {r['signal_ar']} | {r['score']} | {r['strength_txt']} | ⏱{r['best_expiry_m']}\n"
-        try: await query.message.delete()
-        except: pass
-        await send_signal_with_image(context, cid, all_s[0], save_to_history=True)
-        if len(all_s)>1:
-            await context.bot.send_message(chat_id=int(cid), text=txt, reply_markup=main_keyboard(), parse_mode='Markdown')
-        else:
-            await context.bot.send_message(chat_id=int(cid), text="🎯 القائمة", reply_markup=main_keyboard())
-    elif query.data=="signals":
-        await query.edit_message_text("⚡ **جاري الفحص...**")
-        all_s=get_all_signals_legendary(manual=True)
-        if not all_s:
-            await query.edit_message_text("⚠ لا توجد إشارة الآن", reply_markup=main_keyboard())
-            return
-        txt=f"📈 **إشارات V4.3 DUAL SOURCE 99% ({len(all_s)}):**\n\n"
-        for r in all_s:
-            arrow="🟢⬆" if r["signal"]=="CALL" else "🔴⬇"
-            rev=" 🔄" if r.get("reversal") else ""
-            txt+=f"{arrow}{rev} {r['pair']} {r['signal_ar']} | {r['score']} | {r['strength_txt']} | ⏱{r['best_expiry_m']}\n"
-        await query.edit_message_text(txt, reply_markup=main_keyboard(), parse_mode='Markdown')
-    elif query.data=="choose_market":
-        await query.edit_message_text("📊 **اختيار السوق:**", reply_markup=markets_keyboard(), parse_mode='Markdown')
-    elif query.data.startswith("m_"):
-        sym=query.data.replace("m_","")
-        await query.edit_message_text(f"⚡ تحليل {CLEAN.get(sym,sym)}...")
-        df_m5, df_m15, df_m30, df_h1 = fetch_4tf_live(sym)
-        r=analyze_15_indicators(sym, df_m5, df_m15, df_m30, df_h1, strict=False) if df_m5 is not None else None
-        if r:
-            try: await query.message.delete()
-            except: pass
-            await send_signal_with_image(context, cid, r, save_to_history=True)
-            # تم حذف الرسالة الإضافية - الأزرار ترجع تلقائياً بعد انتهاء الصفقة
-        else:
-            await query.edit_message_text(f"⚠ {CLEAN.get(sym,sym)} لا توجد إشارة الآن", reply_markup=main_keyboard())
-    elif query.data=="auto_start":
-        state.setdefault("auto",{})[cid]=True
-        save_state(state)
-        await query.edit_message_text("""النظام شغال ✅
-
-⚡ جاري مسح الأسواق
-M5 • M15 • M30 • H1
-
-المصفوفة الأساسية
-
-⏱️ 03 • 📡 DS • 📈 TF
-💎 PW • 🧠 AI • 🔄 RV
-🛡️ 96+ • ⚡ 08 • 📜 LG
-
-🟢 متصل • جاهز للعمل""", reply_markup=main_keyboard(), parse_mode='Markdown')
-    elif query.data=="auto_stop":
-        state.setdefault("auto",{})[cid]=False
-        save_state(state)
-        await query.edit_message_text("🛑 **متوقف**", reply_markup=main_keyboard(), parse_mode='Markdown')
-    elif query.data=="stats":
-        await query.edit_message_text("📊 **البوت يعمل بكفاءة عالية**\n\n✅ إشارات دقيقة\n⚡ سريع\n🔒 آمن", reply_markup=main_keyboard(), parse_mode='Markdown')
-    elif query.data=="settings":
-        auto="شغال 🟢" if state.get("auto",{}).get(cid) else "متوقف 🔴"
-        await query.edit_message_text(f"⚙ **الإعدادات**\n\n🤖 الحالة: {auto}", reply_markup=main_keyboard(), parse_mode='Markdown')
-    elif query.data=="trades_performance":
-        txt=get_trades_text(cid)
-        await query.edit_message_text(txt, reply_markup=trades_keyboard(), parse_mode='Markdown')
-    elif query.data=="signals_history":
-        txt=get_signals_history_text(cid)
-        await query.edit_message_text(txt, reply_markup=signals_history_keyboard(), parse_mode='Markdown')
-    elif query.data=="signals_history_clear":
-        state.setdefault("signals_log",{})[cid]=[]
-        save_state(state)
-        await query.edit_message_text("🗑 تم مسح سجل مجموع الإشارات", reply_markup=signals_history_keyboard(), parse_mode='Markdown')
-    elif query.data=="trade_profit":
-        state.setdefault("trades",{}).setdefault(cid,[]).append({"type":"profit","ts":time.time()})
-        save_state(state)
-        await query.edit_message_text(get_trades_text(cid), reply_markup=trades_keyboard(), parse_mode='Markdown')
-    elif query.data=="trade_loss":
-        state.setdefault("trades",{}).setdefault(cid,[]).append({"type":"loss","ts":time.time()})
-        save_state(state)
-        await query.edit_message_text(get_trades_text(cid), reply_markup=trades_keyboard(), parse_mode='Markdown')
-    elif query.data=="trades_clear":
-        state.setdefault("trades",{})[cid]=[]
-        save_state(state)
-        await query.edit_message_text("🗑 تم مسح الصفقات", reply_markup=trades_keyboard(), parse_mode='Markdown')
-    elif query.data=="back_main":
-        await query.edit_message_text("🎯 **القائمة الرئيسية**", reply_markup=main_keyboard(), parse_mode='Markdown')
-
-last_global_send=0
-last_sent_info=""
-last_sent_per_symbol={}
-async def check_signals(context: ContextTypes.DEFAULT_TYPE):
-    global last_global_send, last_sent_info, last_sent_per_symbol
-    now=time.time()
-    if now-last_global_send<180: return
+async def delete_signal_job(context, chat_id, message_id):
+    """حذف الإشارة بعد انتهاء وقتها"""
     try:
-        best=get_best_legendary()
-        if not best: return
-        symbol=best["symbol"]; signal=best["signal"]
-        last_info=last_sent_per_symbol.get(symbol)
-        if last_info:
-            last_time, last_sig = last_info
-            if last_sig==signal and (now-last_time)<900: return
-            if (now-last_time)<600: return
-        if last_sent_info==best["pair"] and (now-last_global_send)<300: return
-        sent=0
-        for cid, ok in list(state.get("auth",{}).items()):
-            if not ok: continue
-            if state.get("paused",{}).get(cid): continue
-            if not state.get("auto",{}).get(cid): continue
-            try:
-                await send_signal_with_image(context, cid, best, save_to_history=True, is_auto=True)
-                sent+=1
-            except: pass
-        if sent>0:
-            last_global_send=now
-            last_sent_info=best["pair"]
-            last_sent_per_symbol[symbol]=(now, signal)
-    except Exception as e:
-        pass
-
-async def clean(context: ContextTypes.DEFAULT_TYPE):
-    try:
-        import json
-        for cid in list(state.get("trades",{}).keys()):
-            state["trades"][cid]=[t for t in state["trades"][cid] if time.time()-t.get("ts",0)<43200]
-        save_state(state)
-    except: pass
-
-def main():
-    # حذف webhook + pending updates قبل البدء - يمنع Conflict
-    for _ in range(3):
+        await context.bot.delete_message(chat_id=int(chat_id), message_id=message_id)
+        # إرسال رسالة أن الإشارة انتهت
         try:
-            requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=10)
-            time.sleep(2)
-        except: 
+            await context.bot.send_message(chat_id=int(chat_id), text="🗑️ انتهت صلاحية الإشارة - تم الحذف تلقائياً", reply_markup=main_keyboard())
+        except:
             pass
-    
-    # حذف getUpdates المتعلقة
-    try:
-        requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset=-1", timeout=5)
     except:
         pass
-        
-    time.sleep(3)
-    
-    app=Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(buttons))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.job_queue.run_repeating(check_signals, interval=180, first=30)
-    app.job_queue.run_repeating(clean, interval=3600, first=60)
-    logging.info("Bot started - V5 FREE ULTRA READY")
-    print("=== BOT STARTED ===")
-    print(f"BOT_TOKEN: {BOT_TOKEN[:10]}...")
-    print(f"PASSWORD: {PASSWORD}")
-    # drop_pending_updates=True مهم عشان يرد على /start الجديد
-    app.run_polling(drop_pending_updates=True, close_loop=False, allowed_updates=Update.ALL_TYPES, poll_interval=2.0)
 
 
-if __name__=="__main__":
-    threading.Thread(target=run_flask, daemon=True).start()
-    time.sleep(2)
-    main()
