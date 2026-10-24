@@ -580,32 +580,54 @@ async def check_signals(context: ContextTypes.DEFAULT_TYPE):
             last_sent_info=best["pair"]
     except: pass
 
+
 def main():
+    print("=== MAIN() ENTERED ===", flush=True)
     for _ in range(3):
         try:
+            print(f"Deleting webhook attempt {_+1}", flush=True)
             requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=10)
             time.sleep(1)
-        except: pass
+        except Exception as e:
+            print(f"Webhook delete fail: {e}", flush=True)
     time.sleep(2)
+    print("Creating images...", flush=True)
     create_images()
+    print("Images done, starting polling loop", flush=True)
     while True:
         try:
-            print("=== STARTING BOT POLLING V5 FINAL ===")
+            print("=== STARTING BOT POLLING V5 FINAL ===", flush=True)
+            from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+            from telegram import Update
+            from telegram.ext import ContextTypes
             app=Application.builder().token(BOT_TOKEN).build()
             app.add_handler(CommandHandler("start", start))
             app.add_handler(CallbackQueryHandler(buttons))
             app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
             app.job_queue.run_repeating(check_signals, interval=180, first=30)
-            print("=== BOT READY - PASSWORD HIDDEN ===")
-            print("=== BOT STARTED ===")
-            app.run_polling(drop_pending_updates=True, close_loop=False, allowed_updates=Update.ALL_TYPES, poll_interval=1.0, timeout=30)
+            print("=== BOT READY - PASSWORD HIDDEN ===", flush=True)
+            print("=== BOT STARTED ===", flush=True)
+            print(f"BOT_TOKEN OK: {BOT_TOKEN[:10]}... len={len(BOT_TOKEN)}", flush=True)
+            app.run_polling(drop_pending_updates=True, close_loop=False, allowed_updates=["message","callback_query"], poll_interval=1.0, timeout=30)
         except Exception as e:
-            print(f"POLLING CRASHED: {e} - Restarting in 10s...")
+            import traceback
+            print(f"POLLING CRASHED: {e}", flush=True)
+            traceback.print_exc()
+            print("Restarting in 10s...", flush=True)
             time.sleep(10)
             continue
 
 if __name__=="__main__":
-    threading.Thread(target=run_flask, daemon=True).start()
-    threading.Thread(target=self_ping, daemon=True).start()
+    print("=== PROGRAM START ===", flush=True)
+    print(f"Python main.py starting, BOT_TOKEN exists: {bool(BOT_TOKEN)}", flush=True)
+    # Flask في ثريد
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    print("Flask thread started", flush=True)
+    # self_ping في ثريد
+    ping_thread = threading.Thread(target=self_ping, daemon=True)
+    ping_thread.start()
+    print("Self-ping thread started", flush=True)
     time.sleep(2)
+    print("Starting main polling...", flush=True)
     main()
