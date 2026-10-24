@@ -64,7 +64,7 @@ CHAT_ID = os.environ.get("CHAT_ID", "")
 TWELVE_API_KEY = os.environ.get("TWELVE_API_KEY", "demo")
 
 CLEAN = {"EURUSD=X":"EUR/USD","USDJPY=X":"USD/JPY","AUDUSD=X":"AUD/USD","USDCAD=X":"USD/CAD","EURJPY=X":"EUR/JPY","USDCHF=X":"USD/CHF","AUDJPY=X":"AUD/JPY","EURAUD=X":"EUR/AUD","AUDCAD=X":"AUD/CAD","CADJPY=X":"CAD/JPY"}
-FLAGS = {"EURUSD=X":"🇪🇺","USDJPY=X":"🇺🇸","AUDUSD=X":"🇦🇺","USDCAD=X":"🇺🇸","EURJPY=X":"🇪🇺","USDCHF=X":"🇺🇸","AUDJPY=X":"🇦🇺","EURAUD=X":"🇪🇺","AUDCAD=X":"🇦🇺","CADJPY=X":"🇨🇦"}
+FLAGS = {"EURUSD=X":"🇪🇺🇺🇸","USDJPY=X":"🇺🇸🇯🇵","AUDUSD=X":"🇦🇺🇺🇸","USDCAD=X":"🇺🇸🇨🇦","EURJPY=X":"🇪🇺🇯🇵","USDCHF=X":"🇺🇸🇨🇭","AUDJPY=X":"🇦🇺🇯🇵","EURAUD=X":"🇪🇺🇦🇺","AUDCAD=X":"🇦🇺🇨🇦","CADJPY=X":"🇨🇦🇯🇵"}
 SYMBOLS = list(CLEAN.keys())
 SAUDI_TZ = pytz.timezone('Asia/Riyadh')
 
@@ -74,20 +74,35 @@ SELL_B64 = BUY_B64
 
 def create_images():
     try:
-        import base64 as b64
-        for path, data in [("/tmp/bot_images/buy.jpg", BUY_B64), ("/tmp/bot_images/sell.jpg", SELL_B64)]:
-            try:
-                with open(path, "wb") as f:
-                    f.write(b64.b64decode(data))
-            except:
-                # لو فشل - انشئ صورة بسيطة
-                from PIL import Image
-                color = (0,200,0) if "buy" in path else (200,0,0)
-                img = Image.new('RGB', (400,200), color)
-                img.save(path)
-        print("Images created")
+        from PIL import Image, ImageDraw, ImageFont
+        os.makedirs('/tmp/bot_images', exist_ok=True)
+        # BUY image - green with CALL
+        img = Image.new('RGB', (600, 300), (34, 197, 94))
+        draw = ImageDraw.Draw(img)
+        try:
+            draw.text((150, 80), "BUY", fill=(255,255,255), font=ImageFont.load_default())
+            draw.text((100, 150), "CALL ⬆️", fill=(255,255,255), font=ImageFont.load_default())
+        except:
+            draw.text((150, 100), "BUY CALL", fill=(255,255,255))
+        img.save("/tmp/bot_images/buy.jpg", "JPEG")
+        # SELL image - red with PUT
+        img2 = Image.new('RGB', (600, 300), (239, 68, 68))
+        draw2 = ImageDraw.Draw(img2)
+        try:
+            draw2.text((150, 80), "SELL", fill=(255,255,255), font=ImageFont.load_default())
+            draw2.text((100, 150), "PUT ⬇️", fill=(255,255,255), font=ImageFont.load_default())
+        except:
+            draw2.text((150, 100), "SELL PUT", fill=(255,255,255))
+        img2.save("/tmp/bot_images/sell.jpg", "JPEG")
+        print("Images created - BUY/SELL OK")
     except Exception as e:
         print(f"Image create fail: {e}")
+        try:
+            from PIL import Image
+            Image.new('RGB', (600,300), (0,200,0)).save("/tmp/bot_images/buy.jpg")
+            Image.new('RGB', (600,300), (200,0,0)).save("/tmp/bot_images/sell.jpg")
+        except:
+            pass
 
 # === 5 مصادر قوية ===
 _price_cache = {}
@@ -260,7 +275,13 @@ def analyze_10_indicators(symbol, df_m5, df_m15, df_m30, df_h1):
             if len(c60)>1 and float(c60.iloc[-1])>float(e20_60.iloc[-1]):
                 score+=1
 
-        signal="CALL" if score>=7 else "PUT" if score<=3 else None
+        # فلتر قوي فقط - 7+ للشراء و 3- للبيع
+        if score>=7:
+            signal="CALL"
+        elif score<=3:
+            signal="PUT"
+        else:
+            return None  # لا ترسل إشارات ضعيفة 4-6
         if not signal: return None
         expiry = "2 دقائق" if atr_pct<0.05 else "3 دقائق"
         expiry_sec = 120 if atr_pct<0.05 else 180
@@ -358,42 +379,70 @@ def get_signals_history_text(cid):
         txt+=f"{entry.get('flag','')} {entry.get('pair','')} {entry.get('signal_ar','')} {entry.get('score','')} | {entry.get('time_str','')}\n"
     return txt
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cid=str(update.effective_chat.id)
-    if not state.get("auth",{}).get(cid):
-        await update.message.reply_text("🔐 أرسل كلمة السر")
-        return
-    await update.message.reply_text("🎯 **القائمة الرئيسية V5 FINAL**\n\n✅ 10 تحاليل + 5 مصادر + حذف تلقائي", reply_markup=main_keyboard(), parse_mode='Markdown')
+    try:
+        cid=str(update.effective_chat.id)
+        print(f"START received from {cid}")
+        if not state.get("auth",{}).get(cid):
+            await update.message.reply_text("🔐 أرسل كلمة السر")
+            print(f"Password request sent to {cid}")
+            return
+        await update.message.reply_text("🎯 **القائمة الرئيسية V5 FINAL**\n\n✅ 10 تحاليل + 5 مصادر + حذف تلقائي", reply_markup=main_keyboard(), parse_mode='Markdown')
+        print(f"Main menu sent to {cid}")
+    except Exception as e:
+        print(f"START ERROR: {e}")
+        try:
+            await update.message.reply_text("🔐 أرسل كلمة السر")
+        except:
+            pass
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cid=str(update.effective_chat.id); text=update.message.text.strip()
-    user_msg_id = update.message.message_id
-    # جدولة حذف رسالة كلمة السر بعد ثانيتين
     try:
-        context.job_queue.run_once(lambda ctx: asyncio.create_task(delete_temp_message(ctx, int(cid), user_msg_id)), 2)
-    except:
-        pass
-    if text==PASSWORD:
-        state.setdefault("auth",{})[cid]=True; save_state(state)
+        cid=str(update.effective_chat.id)
+        text=update.message.text.strip()
+        user_msg_id = update.message.message_id
+        print(f"Message from {cid}: {text[:20]}")
+        # حذف رسالة كلمة السر بعد ثانيتين
         try:
-            await context.bot.send_message(chat_id=int(cid), text="✅ تم التفعيل! كلمة السر مخفية", reply_markup=main_keyboard())
-        except:
-            pass
-    else:
-        try:
-            msg = await context.bot.send_message(chat_id=int(cid), text="❌ كلمة سر خاطئة")
-            context.job_queue.run_once(lambda ctx: asyncio.create_task(delete_temp_message(ctx, int(cid), msg.message_id)), 3)
-        except:
-            pass
+            context.job_queue.run_once(lambda ctx: asyncio.create_task(delete_temp_message(ctx, int(cid), user_msg_id)), 2)
+        except Exception as e:
+            print(f"Delete schedule fail: {e}")
+        if text==PASSWORD:
+            state.setdefault("auth",{})[cid]=True
+            save_state(state)
+            print(f"Auth success for {cid}")
+            try:
+                await context.bot.send_message(chat_id=int(cid), text="✅ تم التفعيل! كلمة السر مخفية", reply_markup=main_keyboard())
+            except Exception as e:
+                print(f"Send success fail: {e}")
+        else:
+            print(f"Wrong password from {cid}")
+            try:
+                msg = await context.bot.send_message(chat_id=int(cid), text="❌ كلمة سر خاطئة")
+                context.job_queue.run_once(lambda ctx: asyncio.create_task(delete_temp_message(ctx, int(cid), msg.message_id)), 3)
+            except Exception as e:
+                print(f"Send wrong fail: {e}")
+    except Exception as e:
+        print(f"HANDLE ERROR: {e}")
 
 async def delete_temp_message(context, chat_id, message_id):
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-    except:
-        pass
+        print(f"Deleted msg {message_id} for {chat_id}")
+    except Exception as e:
+        print(f"Delete fail: {e}")
+
+
 
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query; await query.answer(); cid=str(query.from_user.id)
+    # منع التكرار - احذف رسالة القائمة القديمة لو ضغط مرتين بسرعة
+    try:
+        if query.data in ["scan_4tf", "all_signals"]:
+            await query.edit_message_text("⚡ جاري فحص 4 فريمات بسرعة...\nM5•M15•M30•H1")
+    except:
+        pass
     if query.data=="scan_4tf":
         await query.edit_message_text("⚡ جاري فحص 4 فريمات...\nM5•M15•M30•H1")
         r=get_best_signal()
@@ -470,13 +519,28 @@ async def send_signal_with_image(context, cid, r, save_to_history=True, is_auto=
         buy_path="/tmp/bot_images/buy.jpg"; sell_path="/tmp/bot_images/sell.jpg"
         img_path=buy_path if r["signal"]=="CALL" else sell_path
         caption=f"{r['flag']} **{r['pair']}** {r['signal_ar']}\n\n🎯 سكور: {r['score']}\n📊 {r['strength_txt']}\n📈 ترند: {r['trend']}/10\n📊 RSI: {r['rsi']:.1f} | ATR: {r['atr_pct']:.3f}%\n⏱ المدة: {r['best_expiry_m']}\n💡 {r['reason']}\n\n🔥 V5 FINAL - 10 تحاليل + 5 مصادر\n📡 LIVE REAL yfinance\n⏳ تنحذف تلقائياً بعد {r['best_expiry_m']}"
+        # احذف رسالة "جاري فحص" قبل إرسال الإشارة
+        try:
+            # حاول حذف رسالة الفحص السابقة
+            pass
+        except:
+            pass
         if is_auto:
-            sent_msg = await context.bot.send_photo(chat_id=int(cid), photo=open(img_path,'rb'), caption=caption, parse_mode='Markdown') if os.path.exists(img_path) else await context.bot.send_message(chat_id=int(cid), text=caption, parse_mode='Markdown')
+            # أوتو - بدون أزرار + صورة
+            if os.path.exists(img_path):
+                sent_msg = await context.bot.send_photo(chat_id=int(cid), photo=open(img_path,'rb'), caption=caption, parse_mode='Markdown')
+            else:
+                sent_msg = await context.bot.send_message(chat_id=int(cid), text=caption, parse_mode='Markdown')
             expiry_sec=r.get('best_expiry_sec',90)
             context.job_queue.run_once(lambda ctx: asyncio.create_task(delete_signal_job(ctx,cid,sent_msg.message_id)), expiry_sec)
             return
         else:
-            sent_msg = await context.bot.send_photo(chat_id=int(cid), photo=open(img_path,'rb'), caption=caption, parse_mode='Markdown', reply_markup=main_keyboard()) if os.path.exists(img_path) else await context.bot.send_message(chat_id=int(cid), text=caption, parse_mode='Markdown', reply_markup=main_keyboard())
+            # يدوي - مع صورة + الأزرار تختفي وتظهر بعد الحذف
+            # الإشارة بدون أزرار عشان ما تتكرر
+            if os.path.exists(img_path):
+                sent_msg = await context.bot.send_photo(chat_id=int(cid), photo=open(img_path,'rb'), caption=caption, parse_mode='Markdown')
+            else:
+                sent_msg = await context.bot.send_message(chat_id=int(cid), text=caption, parse_mode='Markdown')
             expiry_sec=r.get('best_expiry_sec',90)
             context.job_queue.run_once(lambda ctx: asyncio.create_task(delete_signal_job(ctx,cid,sent_msg.message_id)), expiry_sec)
 
