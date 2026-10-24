@@ -1,8 +1,8 @@
-python-telegram-bot[job-queue]==21.6
+python-telegram-bot[job-queue]==20.7
 Flask==3.0.0
+yfinance==0.2.28
+pandas==2.0.3
 requests
-yfinance
-pandas
-numpy
 pytz
 Pillow
+numpy
