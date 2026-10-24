@@ -304,17 +304,36 @@ def get_signals_history_text(cid):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cid=str(update.effective_chat.id)
     if not state.get("auth",{}).get(cid):
-        await update.message.reply_text("🔐 أرسل كلمة السر: 7154")
+        await update.message.reply_text("🔐 أرسل كلمة السر")
         return
     await update.message.reply_text("🎯 **القائمة الرئيسية V5 FINAL**\n\n✅ 10 تحاليل + 5 مصادر + حذف تلقائي", reply_markup=main_keyboard(), parse_mode='Markdown')
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cid=str(update.effective_chat.id); text=update.message.text.strip()
+    user_msg_id = update.message.message_id
+    # جدولة حذف رسالة كلمة السر بعد ثانيتين
+    try:
+        context.job_queue.run_once(lambda ctx: asyncio.create_task(delete_temp_message(ctx, int(cid), user_msg_id)), 2)
+    except:
+        pass
     if text==PASSWORD:
         state.setdefault("auth",{})[cid]=True; save_state(state)
-        await update.message.reply_text("✅ تم التفعيل!", reply_markup=main_keyboard())
+        try:
+            await context.bot.send_message(chat_id=int(cid), text="✅ تم التفعيل! كلمة السر مخفية", reply_markup=main_keyboard())
+        except:
+            pass
     else:
-        await update.message.reply_text("❌ كلمة سر خاطئة")
+        try:
+            msg = await context.bot.send_message(chat_id=int(cid), text="❌ كلمة سر خاطئة")
+            context.job_queue.run_once(lambda ctx: asyncio.create_task(delete_temp_message(ctx, int(cid), msg.message_id)), 3)
+        except:
+            pass
+
+async def delete_temp_message(context, chat_id, message_id):
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except:
+        pass
 
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query; await query.answer(); cid=str(query.from_user.id)
@@ -456,7 +475,7 @@ def main():
             app.add_handler(CallbackQueryHandler(buttons))
             app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
             app.job_queue.run_repeating(check_signals, interval=180, first=30)
-            print(f"BOT_TOKEN: {BOT_TOKEN[:10]}... PASSWORD: {PASSWORD}")
+            print("=== BOT READY - PASSWORD HIDDEN ===")
             print("=== BOT STARTED ===")
             app.run_polling(drop_pending_updates=True, close_loop=False, allowed_updates=Update.ALL_TYPES, poll_interval=1.0, timeout=30)
         except Exception as e:
